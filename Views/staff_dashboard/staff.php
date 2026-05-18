@@ -1,6 +1,12 @@
 <?php
 session_start();
 
+// Prevent caching of authenticated pages so the browser back button cannot
+// reveal them after logout, and stale credentials cannot be replayed.
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+
 // Check if user is logged in and is staff
 if (!isset($_SESSION['user_role']) || strtolower($_SESSION['user_role']) !== 'staff') {
     // Redirect to landing page if not authenticated
@@ -904,7 +910,7 @@ if (isset($_SESSION['user_id'])) {
               <i class="bi bi-person-fill" style="color:#6f4e37; font-size:1.3rem;"></i> My Profile
             </a>
             <hr style="margin: 0.5rem 0; border-color: #f3e8df;">
-            <a href="../../index.php" class="dropdown-link d-flex align-items-center gap-2 text-danger" style="padding: 10px 24px; font-weight:500; font-size:1rem; text-decoration:none;">
+            <a href="../../logout.php" class="dropdown-link d-flex align-items-center gap-2 text-danger" style="padding: 10px 24px; font-weight:500; font-size:1rem; text-decoration:none;">
               <i class="bi bi-box-arrow-right" style="color:#e76f51; font-size:1.3rem;"></i> Logout
             </a>
           </div>
@@ -1665,7 +1671,7 @@ if (isset($_SESSION['user_id'])) {
       }
     }
 
-    function logout() { if (confirm('Logout?')) window.location.href = 'login.php'; }
+    function logout() { if (confirm('Logout?')) window.location.href = '../../logout.php'; }
 
     // Keep the walk-in order panel visible; this routine now just resets the form state.
     function hideInlineOrder() {

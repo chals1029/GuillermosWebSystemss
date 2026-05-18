@@ -1,6 +1,12 @@
 <?php
 session_start();
 
+// Prevent caching of authenticated pages so the browser back button cannot
+// reveal them after logout, and stale credentials cannot be replayed.
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+
 // Check if user is logged in as customer
 if (!isset($_SESSION['user_role']) || strtolower($_SESSION['user_role']) !== 'customer') {
     // Redirect to landing page if not authenticated
@@ -1386,7 +1392,7 @@ header {
                 <i class="bi bi-calendar-check"></i> My Reservations
                 </a>
                 <hr class="menu-divider">
-                <a href="../../index.php" class="dropdown-link text-danger">
+                <a href="../../logout.php" class="dropdown-link text-danger">
                     <i class="bi bi-box-arrow-right"></i> Logout
                 </a>
             </div>

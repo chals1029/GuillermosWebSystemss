@@ -254,7 +254,7 @@ function registerFailedLoginAttempt(string $identity): array
     $remaining = max(0, 5 - (int)$record['failed_attempts']);
     return [
         'locked' => false,
-        'message' => 'Invalid credentials. Please try again. ' . $remaining . ' attempt(s) remaining before temporary lock.',
+        'message' => 'Invalid email or password. ' . $remaining . ' attempt(s) remaining before temporary lock.',
     ];
 }
 
@@ -786,29 +786,19 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $identity = trim($_POST['identity'] ?? '');
     $password = $_POST['password'] ?? '';
 
-    if (hasBlockedLoginWording($identity)) {
+    // Treat suspicious / blocked-wording attempts as a normal failed login so we
+    // never expose stack traces or internal block messages, and never leak which
+    // emails exist. The user simply sees "Invalid email or password".
+    if (hasBlockedLoginWording($identity) || requestHasSuspiciousSqlInput([$identity, $password])) {
         if (isAjaxRequest()) {
             jsonResponse([
                 'status' => 'error',
-                'message' => SQLI_BLOCK_MESSAGE,
-            ], 400);
+                'message' => 'Invalid email or password',
+            ], 401);
         }
 
         redirectTo('/Views/landing/index.php', [
-            'error' => SQLI_BLOCK_MESSAGE,
-        ]);
-    }
-
-    if (requestHasSuspiciousSqlInput([$identity, $password])) {
-        if (isAjaxRequest()) {
-            jsonResponse([
-                'status' => 'error',
-                'message' => SQLI_BLOCK_MESSAGE,
-            ], 400);
-        }
-
-        redirectTo('/Views/landing/index.php', [
-            'error' => SQLI_BLOCK_MESSAGE,
+            'error' => 'Invalid email or password',
         ]);
     }
 
@@ -855,6 +845,12 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     clearLoginAttemptState($identity);
+
+    // Rotate the session ID on privilege change to prevent session fixation.
+    // Any pre-login PHPSESSID the attacker might have planted becomes useless.
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_regenerate_id(true);
+    }
 
     // Simple session login
     $_SESSION['user_id'] = $user['user_id'];

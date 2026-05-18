@@ -2229,6 +2229,30 @@ function renderStars($rating, $max = 5) {
       const messageBox = form.querySelector('[data-message]');
       const submitButton = form.querySelector('button[type="submit"]');
 
+      // Required-field check (HTML5 'required' is also set, this is a belt-and-braces check).
+      const identityInput = form.querySelector('input[name="identity"]');
+      const passwordInput = form.querySelector('input[name="password"]');
+      const identityValue = identityInput ? identityInput.value.trim() : '';
+      const passwordValue = passwordInput ? passwordInput.value : '';
+
+      if (!identityValue || !passwordValue) {
+        setMessage(messageBox, 'Please enter both your email/username and password.', 'error');
+        if (!identityValue && identityInput) identityInput.focus();
+        else if (passwordInput) passwordInput.focus();
+        return;
+      }
+
+      // If the user typed something that looks like an email (contains '@'),
+      // validate the format before contacting the server.
+      if (identityValue.includes('@')) {
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailPattern.test(identityValue)) {
+          setMessage(messageBox, 'Please enter a valid email address.', 'error');
+          if (identityInput) identityInput.focus();
+          return;
+        }
+      }
+
       setMessage(messageBox, 'Signing you in...', 'info');
       setButtonLoading(submitButton, 'Signing in...');
 
