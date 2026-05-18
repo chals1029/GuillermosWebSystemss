@@ -2505,11 +2505,15 @@ function renderStars($rating, $max = 5) {
           if (openBtn) openBtn.click();
           setTimeout(() => {
             const messagesEl = document.getElementById('landing-chat-messages');
-            if (messagesEl) messagesEl.innerHTML = '';
-            const botEl = document.createElement('div');
-            botEl.className = 'chat-bubble bot';
-            botEl.innerHTML = 'To order, please sign in on our website or create an account. Click the Login button above to sign in.';
-            messagesEl.appendChild(botEl);
+            if (!messagesEl) return;
+            messagesEl.innerHTML = '';
+            const row = document.createElement('div');
+            row.className = 'lc-row bot';
+            row.innerHTML = `
+              <div class="lc-mini-avatar"><i class="bi bi-robot" aria-hidden="true"></i></div>
+              <div class="chat-bubble bot">To order, please sign in on our website or create an account. Click the Login button above to sign in.</div>
+            `;
+            messagesEl.appendChild(row);
           }, 200);
         }
       });
@@ -2582,21 +2586,363 @@ function renderStars($rating, $max = 5) {
       <!-- Add Chat Widget Start -->
       <div id="landing-chat-root"></div>
       <style>
-      /* Landing chat widget */
-      #landing-chat-root .chat-btn { position: fixed; right: 18px; bottom: 18px; z-index: 99999; }
-      #landing-chat-root .chat-note { position: fixed; right: 86px; bottom: 26px; z-index: 99999; background:#fff; color:#6B4F3F; border-radius:16px; padding:6px 10px; box-shadow:0 6px 18px rgba(0,0,0,0.15); font-weight:700; display:inline-block; }
-      #landing-chat-root .chat-btn button { background: #6B4F3F; color: white; width:56px; height:56px; border-radius:50%; border:none; box-shadow: 0 8px 20px rgba(0,0,0,0.25); font-size:22px; cursor:pointer }
-      #landing-chat-root .chat-overlay { position: fixed; right: 18px; bottom: 86px; width: 360px; max-width:92vw; height: 460px; background: #fff; border-radius: 12px; box-shadow:0 14px 40px rgba(0,0,0,0.25); overflow:hidden; z-index: 99999; display:none; }
-      #landing-chat-root .chat-header { background:#6B4F3F; color:#fff; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; }
-      #landing-chat-root .chat-messages { padding:12px; overflow-y:auto; height: 340px; background:#f9f9f9; }
-      #landing-chat-root .chat-input { padding:10px; display:flex; gap:8px; border-top:1px solid #eee; }
-      #landing-chat-root .chat-input input { padding: 10px; border-radius:8px; border:1px solid #ddd; width:100%; }
-      #landing-chat-root .chat-suggest { padding:8px; display:flex; gap:8px; flex-wrap:wrap; }
-      #landing-chat-root .chat-suggest button { background:#e9e9e9; border:none; padding:6px 10px; border-radius:10px; cursor:pointer; }
-      #landing-chat-root .chat-bubble { display:inline-block; padding:8px 12px; border-radius:12px; margin:6px 0; max-width:78%; }
-      #landing-chat-root .chat-bubble.user { background:#6B4F3F; color:#fff; text-align:right; float:right; }
-      #landing-chat-root .chat-bubble.bot { background:#fff; border:1px solid #eee; color:#333; float:left; }
-      #landing-chat-root .small-muted { font-size:12px; color:#666; margin-top:6px; text-align:center; }
+      /* =====================================================================
+         Modern Landing Chat Widget
+         --------------------------------------------------------------------- */
+      #landing-chat-root {
+        --lc-brand-1: #6B4F3F;
+        --lc-brand-2: #8B6A50;
+        --lc-brand-3: #C39A6B;
+        --lc-bg: #faf6f1;
+        --lc-surface: #ffffff;
+        --lc-surface-alt: #f3ece2;
+        --lc-text: #2b2118;
+        --lc-text-muted: #8a7a6a;
+        --lc-border: rgba(107, 79, 63, 0.12);
+        --lc-shadow-lg: 0 24px 60px rgba(43, 33, 24, 0.22);
+        --lc-shadow-md: 0 10px 28px rgba(43, 33, 24, 0.16);
+        --lc-radius: 20px;
+        font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      }
+
+      /* Floating action button */
+      #landing-chat-root .lc-fab {
+        position: fixed;
+        right: 22px;
+        bottom: 22px;
+        z-index: 99999;
+        width: 62px;
+        height: 62px;
+        border-radius: 50%;
+        border: none;
+        cursor: pointer;
+        background: linear-gradient(135deg, var(--lc-brand-2), var(--lc-brand-1));
+        color: #fff;
+        font-size: 26px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: var(--lc-shadow-md);
+        transition: transform .2s ease, box-shadow .2s ease;
+      }
+      #landing-chat-root .lc-fab:hover { transform: translateY(-2px) scale(1.04); box-shadow: var(--lc-shadow-lg); }
+      #landing-chat-root .lc-fab:focus-visible { outline: 3px solid rgba(195, 154, 107, 0.55); outline-offset: 3px; }
+      #landing-chat-root .lc-fab::before {
+        content: '';
+        position: absolute;
+        inset: -6px;
+        border-radius: inherit;
+        background: linear-gradient(135deg, rgba(195,154,107,0.55), rgba(107,79,63,0.25));
+        z-index: -1;
+        animation: lc-pulse 2.4s ease-out infinite;
+      }
+      @keyframes lc-pulse {
+        0%   { transform: scale(.9);  opacity: .8; }
+        80%  { transform: scale(1.4); opacity: 0;  }
+        100% { transform: scale(1.4); opacity: 0;  }
+      }
+      #landing-chat-root.is-open .lc-fab::before { animation: none; }
+
+      /* Welcome note */
+      #landing-chat-root .lc-note {
+        position: fixed;
+        right: 96px;
+        bottom: 38px;
+        z-index: 99999;
+        background: var(--lc-surface);
+        color: var(--lc-text);
+        border-radius: 14px;
+        padding: 8px 14px;
+        font-weight: 600;
+        font-size: 13px;
+        box-shadow: var(--lc-shadow-md);
+        display: none;
+        opacity: 0;
+        transform: translateX(8px);
+        transition: opacity .3s ease, transform .3s ease;
+      }
+      #landing-chat-root .lc-note.pop { display: inline-block; opacity: 1; transform: translateX(0); }
+      #landing-chat-root .lc-note.fade-out { opacity: 0; transform: translateX(8px); }
+      #landing-chat-root .lc-note::after {
+        content: '';
+        position: absolute;
+        right: -6px;
+        top: 50%;
+        transform: translateY(-50%) rotate(45deg);
+        width: 12px; height: 12px;
+        background: var(--lc-surface);
+      }
+
+      /* Chat panel */
+      #landing-chat-root .lc-panel {
+        position: fixed;
+        right: 22px;
+        bottom: 100px;
+        width: 380px;
+        max-width: calc(100vw - 32px);
+        height: 560px;
+        max-height: calc(100vh - 140px);
+        background: var(--lc-surface);
+        border-radius: var(--lc-radius);
+        box-shadow: var(--lc-shadow-lg);
+        z-index: 99999;
+        display: none;
+        overflow: hidden;
+        transform: translateY(12px) scale(.98);
+        opacity: 0;
+        transition: transform .22s cubic-bezier(.2,.8,.2,1), opacity .22s ease;
+        flex-direction: column;
+      }
+      #landing-chat-root .lc-panel.is-visible {
+        display: flex;
+        transform: translateY(0) scale(1);
+        opacity: 1;
+      }
+
+      /* Header */
+      #landing-chat-root .lc-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 16px;
+        background: linear-gradient(135deg, var(--lc-brand-1), var(--lc-brand-2));
+        color: #fff;
+        position: relative;
+      }
+      #landing-chat-root .lc-header::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image: radial-gradient(rgba(255,255,255,0.08) 1px, transparent 1px);
+        background-size: 14px 14px;
+        opacity: .35;
+        pointer-events: none;
+      }
+      #landing-chat-root .lc-avatar {
+        width: 40px; height: 40px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.18);
+        backdrop-filter: blur(6px);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        flex-shrink: 0;
+        position: relative;
+        z-index: 1;
+      }
+      #landing-chat-root .lc-title-wrap { flex: 1; min-width: 0; position: relative; z-index: 1; line-height: 1.2; }
+      #landing-chat-root .lc-title { font-weight: 700; font-size: 15px; }
+      #landing-chat-root .lc-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        opacity: .9;
+        margin-top: 2px;
+      }
+      #landing-chat-root .lc-status .lc-dot {
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        background: #4ade80;
+        box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7);
+        animation: lc-online 2s ease-out infinite;
+      }
+      @keyframes lc-online {
+        0%   { box-shadow: 0 0 0 0 rgba(74, 222, 128, .55); }
+        70%  { box-shadow: 0 0 0 7px rgba(74, 222, 128, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+      }
+      #landing-chat-root .lc-close {
+        background: rgba(255,255,255,0.12);
+        border: none;
+        color: #fff;
+        width: 32px; height: 32px;
+        border-radius: 50%;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        position: relative;
+        z-index: 1;
+        transition: background .15s ease;
+      }
+      #landing-chat-root .lc-close:hover { background: rgba(255,255,255,0.24); }
+
+      /* Messages */
+      #landing-chat-root .lc-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 18px 16px 8px;
+        background: var(--lc-bg);
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(107,79,63,0.25) transparent;
+      }
+      #landing-chat-root .lc-messages::-webkit-scrollbar { width: 6px; }
+      #landing-chat-root .lc-messages::-webkit-scrollbar-thumb {
+        background: rgba(107,79,63,0.25);
+        border-radius: 999px;
+      }
+
+      #landing-chat-root .lc-row {
+        display: flex;
+        align-items: flex-end;
+        gap: 8px;
+        max-width: 88%;
+        animation: lc-fade-up .25s ease both;
+      }
+      #landing-chat-root .lc-row.bot { align-self: flex-start; }
+      #landing-chat-root .lc-row.user { align-self: flex-end; flex-direction: row-reverse; }
+      @keyframes lc-fade-up {
+        from { opacity: 0; transform: translateY(6px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+
+      #landing-chat-root .lc-row .lc-mini-avatar {
+        width: 28px; height: 28px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--lc-brand-3), var(--lc-brand-1));
+        color: #fff;
+        font-size: 14px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      #landing-chat-root .lc-row.user .lc-mini-avatar { display: none; }
+
+      #landing-chat-root .chat-bubble {
+        padding: 10px 14px;
+        border-radius: 16px;
+        font-size: 14px;
+        line-height: 1.45;
+        word-wrap: break-word;
+        max-width: 100%;
+        box-shadow: 0 1px 2px rgba(43,33,24,0.06);
+      }
+      #landing-chat-root .chat-bubble.bot {
+        background: var(--lc-surface);
+        color: var(--lc-text);
+        border: 1px solid var(--lc-border);
+        border-bottom-left-radius: 6px;
+      }
+      #landing-chat-root .chat-bubble.user {
+        background: linear-gradient(135deg, var(--lc-brand-1), var(--lc-brand-2));
+        color: #fff;
+        border-bottom-right-radius: 6px;
+      }
+      #landing-chat-root .chat-bubble a { color: inherit; text-decoration: underline; font-weight: 600; }
+      #landing-chat-root .chat-bubble.bot a { color: var(--lc-brand-1); }
+
+      /* Typing indicator */
+      #landing-chat-root .lc-typing {
+        display: inline-flex;
+        gap: 4px;
+        padding: 12px 14px;
+      }
+      #landing-chat-root .lc-typing span {
+        width: 7px; height: 7px;
+        border-radius: 50%;
+        background: var(--lc-brand-2);
+        opacity: .6;
+        animation: lc-bounce 1.2s infinite ease-in-out;
+      }
+      #landing-chat-root .lc-typing span:nth-child(2) { animation-delay: .15s; }
+      #landing-chat-root .lc-typing span:nth-child(3) { animation-delay: .3s; }
+      @keyframes lc-bounce {
+        0%, 60%, 100% { transform: translateY(0); opacity: .35; }
+        30%           { transform: translateY(-4px); opacity: 1; }
+      }
+
+      /* Quick replies */
+      #landing-chat-root .lc-suggest {
+        display: flex;
+        gap: 8px;
+        padding: 10px 14px 4px;
+        background: var(--lc-bg);
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      #landing-chat-root .lc-suggest::-webkit-scrollbar { display: none; }
+      #landing-chat-root .lc-suggest button {
+        flex-shrink: 0;
+        background: var(--lc-surface);
+        border: 1px solid var(--lc-border);
+        color: var(--lc-brand-1);
+        padding: 7px 14px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform .12s ease, background .15s ease, color .15s ease, box-shadow .15s ease;
+        white-space: nowrap;
+      }
+      #landing-chat-root .lc-suggest button:hover {
+        background: linear-gradient(135deg, var(--lc-brand-1), var(--lc-brand-2));
+        color: #fff;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 14px rgba(107,79,63,0.22);
+      }
+
+      /* Input area */
+      #landing-chat-root .lc-input {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 14px 14px;
+        background: var(--lc-bg);
+        border-top: 1px solid var(--lc-border);
+      }
+      #landing-chat-root .lc-input input {
+        flex: 1;
+        padding: 11px 16px;
+        border-radius: 999px;
+        border: 1px solid var(--lc-border);
+        background: var(--lc-surface);
+        color: var(--lc-text);
+        font-size: 14px;
+        outline: none;
+        transition: border-color .15s ease, box-shadow .15s ease;
+      }
+      #landing-chat-root .lc-input input:focus {
+        border-color: var(--lc-brand-2);
+        box-shadow: 0 0 0 3px rgba(107,79,63,0.15);
+      }
+      #landing-chat-root .lc-send {
+        width: 42px; height: 42px;
+        border-radius: 50%;
+        border: none;
+        cursor: pointer;
+        background: linear-gradient(135deg, var(--lc-brand-1), var(--lc-brand-2));
+        color: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        flex-shrink: 0;
+        transition: transform .15s ease, opacity .15s ease;
+      }
+      #landing-chat-root .lc-send:hover { transform: scale(1.06); }
+      #landing-chat-root .lc-send:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+      /* Mobile bottom-sheet */
+      @media (max-width: 480px) {
+        #landing-chat-root .lc-panel {
+          right: 10px;
+          left: 10px;
+          bottom: 90px;
+          width: auto;
+          max-width: none;
+          height: 78vh;
+          border-radius: 18px;
+        }
+        #landing-chat-root .lc-fab { right: 16px; bottom: 16px; width: 56px; height: 56px; font-size: 22px; }
+        #landing-chat-root .lc-note { right: 80px; bottom: 32px; }
+      }
       </style>
 
       <script>
@@ -2606,13 +2952,29 @@ function renderStars($rating, $max = 5) {
         if (!root) return;
 
         root.innerHTML = `
-          <div class="chat-note" id="landing-chat-note" style="display:none;">Hi there 👋</div>
-          <div class="chat-btn"><button id="landing-open-chat" aria-label="Open chat" title="Open chat">🤖</button></div>
-          <div class="chat-overlay" id="landing-chat-overlay">
-            <div class="chat-header"><div>Guillermo's Helper</div><button id="landing-close-chat" style="background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer">×</button></div>
-            <div class="chat-messages" id="landing-chat-messages"><div style="text-align:center;margin-top:120px;color:#888;">Hi there! How can I help you today?</div></div>
-            <div class="chat-suggest" id="landing-chat-suggest"></div>
-            <div class="chat-input"><input id="landing-chat-input" placeholder="Type your question..." /><button id="landing-chat-send">Send</button></div>
+          <div class="lc-note" id="landing-chat-note">Hi there 👋</div>
+          <button type="button" class="lc-fab" id="landing-open-chat" aria-label="Open chat" title="Open chat">
+            <i class="bi bi-robot" aria-hidden="true"></i>
+          </button>
+          <div class="lc-panel" id="landing-chat-overlay" role="dialog" aria-label="Guillermo's Helper chat">
+            <div class="lc-header">
+              <div class="lc-avatar"><i class="bi bi-robot" aria-hidden="true"></i></div>
+              <div class="lc-title-wrap">
+                <div class="lc-title">Guillermo's Helper</div>
+                <div class="lc-status"><span class="lc-dot"></span> Online</div>
+              </div>
+              <button type="button" class="lc-close" id="landing-close-chat" aria-label="Close chat">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+              </button>
+            </div>
+            <div class="lc-messages" id="landing-chat-messages"></div>
+            <div class="lc-suggest" id="landing-chat-suggest"></div>
+            <div class="lc-input">
+              <input id="landing-chat-input" placeholder="Type your question..." autocomplete="off" />
+              <button type="button" class="lc-send" id="landing-chat-send" aria-label="Send message">
+                <i class="bi bi-send-fill" aria-hidden="true"></i>
+              </button>
+            </div>
           </div>
         `;
 
@@ -2623,30 +2985,66 @@ function renderStars($rating, $max = 5) {
         const suggestEl = document.getElementById('landing-chat-suggest');
         const inputEl = document.getElementById('landing-chat-input');
         const sendBtn = document.getElementById('landing-chat-send');
+        let landingWelcomeShown = false;
+        let typingEl = null;
 
-        function addMessage(role, text) {
-          const div = document.createElement('div');
-          div.className = 'chat-bubble ' + (role === 'user' ? 'user' : 'bot');
-          div.innerHTML = text;
-          messagesEl.appendChild(div);
+        function scrollToBottom() {
           messagesEl.scrollTop = messagesEl.scrollHeight;
-          // Re-bind any in-message login links: clicking them should open the login modal
-          // Use event delegation below as well so new content is covered; this ensures links with ids like
-          // 'landing-chat-login', 'landing-chat-login-order', 'landing-chat-login-typed' trigger modal open.
         }
 
-        function reply(text) {
-          setTimeout(() => addMessage('bot', text), 300);
+        function addMessage(role, text) {
+          const row = document.createElement('div');
+          row.className = 'lc-row ' + (role === 'user' ? 'user' : 'bot');
+
+          if (role !== 'user') {
+            const avatar = document.createElement('div');
+            avatar.className = 'lc-mini-avatar';
+            avatar.innerHTML = '<i class="bi bi-robot" aria-hidden="true"></i>';
+            row.appendChild(avatar);
+          }
+
+          const bubble = document.createElement('div');
+          bubble.className = 'chat-bubble ' + (role === 'user' ? 'user' : 'bot');
+          bubble.innerHTML = text;
+          row.appendChild(bubble);
+
+          messagesEl.appendChild(row);
+          scrollToBottom();
+        }
+
+        function showTyping() {
+          if (typingEl) return;
+          typingEl = document.createElement('div');
+          typingEl.className = 'lc-row bot';
+          typingEl.innerHTML = `
+            <div class="lc-mini-avatar"><i class="bi bi-robot" aria-hidden="true"></i></div>
+            <div class="chat-bubble bot lc-typing"><span></span><span></span><span></span></div>
+          `;
+          messagesEl.appendChild(typingEl);
+          scrollToBottom();
+        }
+
+        function hideTyping() {
+          if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+          typingEl = null;
+        }
+
+        function reply(text, delay = 600) {
+          showTyping();
+          setTimeout(() => {
+            hideTyping();
+            addMessage('bot', text);
+          }, delay);
         }
 
         const S_MAP_LINK = 'https://www.google.com/maps/place/Guillermo%27s+Bread+and+Pastry/@14.0554808,120.6428081,17z/data=!3m1!4b1!4m6!3m5!1s0x33bd972cab250eb5:0x6e0e76c19a9e1241!8m2!3d14.0554756!4d120.645383!16s%2Fg%2F11qpy1t852?entry=ttu&g_ep=EgoyMDI1MTEyMy4xIKXMDSoASAFQAw%3D%3D';
         const S_ADDRESS = 'camp avejar, 112 J P Laurel St, Nasugbu, Batangas';
         const suggestions = [
-        { label: 'View Menu', action: () => handleViewMenu() },
-        { label: 'Opening Hours', action: () => reply('We are open from 7:00 AM to 9:00 PM daily.') },
-        { label: 'Where are you located?', action: () => reply(`We are at ${S_ADDRESS}. <a href="${S_MAP_LINK}" target="_blank">Open in Google Maps</a>` ) },
-        { label: 'Order Now', action: () => handleOrderNow() },
-      ];
+          { label: 'View Menu', action: () => handleViewMenu() },
+          { label: 'Opening Hours', action: () => reply('We are open from 7:00 AM to 9:00 PM daily.') },
+          { label: 'Where are you located?', action: () => reply(`We are at ${S_ADDRESS}. <a href="${S_MAP_LINK}" target="_blank" rel="noopener">Open in Google Maps</a>`) },
+          { label: 'Order Now', action: () => handleOrderNow() },
+        ];
 
         function renderSuggestions() {
           suggestEl.innerHTML = '';
@@ -2660,7 +3058,6 @@ function renderStars($rating, $max = 5) {
         }
 
         function goToCategory(category) {
-          // navigate to customer menu filtered by category
           const base = `<?= $basePath ?>` || '';
           const url = base + '/Views/customer_dashboard/Customer.php' + (category && category !== 'all' ? '?category=' + encodeURIComponent(category) : '');
           window.location.href = url;
@@ -2668,14 +3065,12 @@ function renderStars($rating, $max = 5) {
 
         function goToCustomer() {
           const base = `<?= $basePath ?>` || '';
-          const url = base + '/Views/customer_dashboard/Customer.php';
-          window.location.href = url;
+          window.location.href = base + '/Views/customer_dashboard/Customer.php';
         }
 
         function openLoginModal() {
-          // fallback: if a login modal exists, open it. Otherwise, point to login page
           const loginModal = document.getElementById('loginModal');
-          if (loginModal) {
+          if (loginModal && window.bootstrap) {
             const modal = bootstrap.Modal.getOrCreateInstance(loginModal);
             modal.show();
           } else {
@@ -2685,84 +3080,88 @@ function renderStars($rating, $max = 5) {
         }
 
         function handleViewMenu() {
-          // Open login modal immediately and give brief instructions
           openLoginModal();
           reply('Opening the login dialog so you can view our menu and place orders.');
         }
 
         function handleOrderNow() {
-          // Open login modal directly to improve UX, then show confirmation in chat
           openLoginModal();
           reply('Opening the login dialog so you can sign in and place an order.');
         }
 
         function handleInput(text) {
           addMessage('user', text);
-          text = (text || '').toLowerCase();
-          if (text.includes('menu') || text.includes('order') || text.includes('pizza') || text.includes('drink')) {
+          const t = (text || '').toLowerCase();
+          if (t.includes('menu') || t.includes('order') || t.includes('pizza') || t.includes('drink')) {
             openLoginModal();
             reply('Opening the login dialog so you can view our full menu and place orders.');
             return;
           }
-          if (text.includes('open') || text.includes('hour') || text.includes('time')) {
+          if (t.includes('open') || t.includes('hour') || t.includes('time')) {
             reply('We are open from 7:00 AM to 9:00 PM daily.');
             return;
           }
-          if (text.includes('location') || text.includes('where') || text.includes('address')) {
-            reply(`We are at ${S_ADDRESS} — here is a map: <a href="${S_MAP_LINK}" target="_blank">Open in Google Maps</a>`);
+          if (t.includes('location') || t.includes('where') || t.includes('address')) {
+            reply(`We are at ${S_ADDRESS} — here is a map: <a href="${S_MAP_LINK}" target="_blank" rel="noopener">Open in Google Maps</a>`);
             return;
           }
-          if (text.includes('reserve') || text.includes('reservation') || text.includes('book')) {
+          if (t.includes('reserve') || t.includes('reservation') || t.includes('book')) {
             reply('You can reserve via your account on our website. Please log in and head to the Reservations section.');
             return;
           }
-          if (text.includes('contact') || text.includes('phone') || text.includes('email')) {
-            reply('You can call us at (123) 456-7890 or email (info@guillermoscafe.shop)');
+          if (t.includes('contact') || t.includes('phone') || t.includes('email')) {
+            reply('You can call us at (123) 456-7890 or email info@guillermoscafe.shop.');
             return;
           }
-          // fallback
-          reply("Sorry, I didn't quite get that — try asking about 'menu', 'hours', 'location', or 'order'.");
+          reply("Sorry, I didn't quite get that — try asking about <strong>menu</strong>, <strong>hours</strong>, <strong>location</strong>, or <strong>order</strong>.");
         }
 
         function showWelcomeNote() {
           const note = document.getElementById('landing-chat-note');
           if (!note) return;
-          note.style.display = 'inline-block';
           note.classList.remove('fade-out');
-          void note.offsetWidth; // trigger reflow
           note.classList.add('pop');
-          // Hide after a while
           setTimeout(() => {
             note.classList.remove('pop');
             note.classList.add('fade-out');
-            setTimeout(() => { try { note.style.display = 'none'; } catch(e) {} }, 420);
+            setTimeout(() => { note.classList.remove('fade-out'); }, 360);
           }, 3600);
         }
+
+        function openPanel() {
+          root.classList.add('is-open');
+          overlay.classList.add('is-visible');
+          inputEl.focus();
+          if (!landingWelcomeShown) {
+            reply("Hello! I'm Guillermo's Helper 🤖 — I can help with the menu, opening hours, location, and ordering.", 350);
+            landingWelcomeShown = true;
+          }
+        }
+
+        function closePanel() {
+          overlay.classList.remove('is-visible');
+          root.classList.remove('is-open');
+        }
+
         function init() {
           openBtn.addEventListener('click', () => {
-            // Toggle overlay open/close when clicking the landing chat button
-            if (overlay.style.display === 'block') {
-              overlay.style.display = 'none';
-              return;
-            }
-            overlay.style.display = 'block';
-            inputEl.focus();
-            // Show an introductory message when chat is opened for the first time
-            if (!landingWelcomeShown) {
-              reply("Hello! I'm Guillermo's Helper 🤖 — I can help with the menu, opening hours, location, and ordering.");
-              landingWelcomeShown = true;
-            }
+            if (overlay.classList.contains('is-visible')) closePanel();
+            else openPanel();
           });
-          closeBtn.addEventListener('click', () => overlay.style.display = 'none');
-          sendBtn.addEventListener('click', () => { const t = inputEl.value.trim(); if (t) { handleInput(t); inputEl.value = ''; } });
-          inputEl.addEventListener('keypress', e => { if (e.key === 'Enter') { sendBtn.click(); } });
+          closeBtn.addEventListener('click', closePanel);
+          sendBtn.addEventListener('click', () => {
+            const t = inputEl.value.trim();
+            if (t) { handleInput(t); inputEl.value = ''; }
+          });
+          inputEl.addEventListener('keypress', e => {
+            if (e.key === 'Enter') { e.preventDefault(); sendBtn.click(); }
+          });
           renderSuggestions();
         }
 
         init();
-        // Show welcome chat-note when the page loads
         setTimeout(() => showWelcomeNote(), 900);
-        // Expose functions to global so the page buttons can use it
+
         window.landingChat = {
             handleOrderNow: handleOrderNow,
             handleViewMenu: handleViewMenu,
