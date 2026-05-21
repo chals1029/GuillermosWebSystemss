@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../Config.php';
 require_once __DIR__ . '/EmailApiController.php';
+require_once __DIR__ . '/SupplyChainService.php';
 
 class CustomerController
 {
@@ -491,6 +492,10 @@ class CustomerController
         $this->conn->begin_transaction();
 
         try {
+            $supplyService = SupplyChainService::baseTablesReady($this->conn)
+                ? new SupplyChainService($this->conn)
+                : null;
+
             // 1. Validate stock availability for all items
             foreach ($orderData['items'] as $item) {
                 $productId = (int)($item['product_id'] ?? 0);
@@ -509,6 +514,20 @@ class CustomerController
 
                 if ($product['Stock_Quantity'] < $quantity) {
                     throw new \Exception("Insufficient stock for {$product['Product_Name']}");
+                }
+
+                if ($supplyService !== null) {
+                    $recipe = $supplyService->getRecipeForProduct($productId);
+                    if ($recipe !== []) {
+                        foreach ($recipe as $line) {
+                            $needed = (float)$line['Quantity_Per_Serving'] * $quantity;
+                            if ((float)$line['Stock_Quantity'] < $needed) {
+                                throw new \Exception(
+                                    'Insufficient material for ' . $product['Product_Name'] . ': ' . ($line['Item_Name'] ?? 'ingredient')
+                                );
+                            }
+                        }
+                    }
                 }
             }
 
@@ -560,6 +579,10 @@ class CustomerController
                     $stmt->close();
                     // Log inventory change if applicable (use user id context)
                     try { $this->recordInventoryLog($productId, -$quantity, $userId, 'Remove'); } catch (\Throwable $e) { /* don't fail order on logging error */ }
+                }
+
+                if ($supplyService !== null) {
+                    $supplyService->deductMaterialsForProduct($productId, (float)$quantity);
                 }
             }
 
@@ -934,6 +957,13 @@ class CustomerController
                 }
                 $stmt->close();
                 try { $this->recordInventoryLog((int)$item['Product_ID'], (int)$item['Quantity'], $userId, 'Add'); } catch (\Throwable $e) { /* ignore logging errors */ }
+            }
+
+            if (SupplyChainService::baseTablesReady($this->conn)) {
+                $supplyService = new SupplyChainService($this->conn);
+                foreach ($items as $item) {
+                    $supplyService->restoreMaterialsForProduct((int)$item['Product_ID'], (float)$item['Quantity']);
+                }
             }
 
             // Update order status to Cancelled

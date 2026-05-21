@@ -7,6 +7,7 @@ if (!isset($_SESSION['user_role']) || strtolower($_SESSION['user_role']) !== 'ow
     exit;
 }
 require_once __DIR__ . '/../../Controllers/OwnerController.php';
+require_once __DIR__ . '/../../Controllers/SupplyChainController.php';
 require_once __DIR__ . '/../../Controllers/EmailApiController.php';
 require_once __DIR__ . '/../../Controllers/Security/DdosGuard.php';
 
@@ -190,6 +191,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
   // Profile editing removed: owner profile is read-only in the dashboard now.
+$supplyAction = (string)($_GET['action'] ?? $_POST['action'] ?? '');
+if ($ownerActionRequest && strpos($supplyAction, 'supply-') === 0) {
+    (new SupplyChainController())->handleAjax();
+    exit;
+}
 // Existing handleAjax() for other actions (inventory, etc.)
 if (isset($_GET['action']) || (isset($_POST['action']) && !in_array($_POST['action'], ['add_staff', 'verify_staff']))) {
     $ownerController->handleAjax();
@@ -912,6 +918,12 @@ $productPerformance = $ownerController->getProductPerformance();
       </a>
     </li>
     <li class="nav-item">
+      <a class="nav-link" data-page="supply-chain">
+        <i class="bi bi-truck me-3" style="font-size:1.05rem;"></i>
+        Supply Chain
+      </a>
+    </li>
+    <li class="nav-item">
       <a class="nav-link" data-page="history">
         <i class="bi bi-clock-history me-3" style="font-size:1.05rem;"></i>
         System History
@@ -1077,6 +1089,50 @@ $productPerformance = $ownerController->getProductPerformance();
               <p>Total Revenue<br><strong>₱<?= number_format($dashboardStats['total_revenue'] ?? 0, 2) ?></strong></p>
             </div>
             <img src="icons/revenue.png" alt="">
+          </div>
+        </div>
+      </div>
+      <?php
+        $supplyAlerts = $dashboardStats['supply_alerts'] ?? [];
+        $lowMaterials = $supplyAlerts['low_stock_materials'] ?? [];
+        $lowProducts = $supplyAlerts['low_stock_products'] ?? [];
+        $openPos = (int)($supplyAlerts['open_purchase_orders'] ?? 0);
+        $hasAlerts = count($lowMaterials) > 0 || count($lowProducts) > 0 || $openPos > 0;
+      ?>
+      <div class="row g-3 mb-4" id="ownerStockAlertsRow" style="<?= $hasAlerts ? '' : 'display:none;' ?>">
+        <div class="col-12">
+          <div class="card shadow-sm border-warning">
+            <div class="card-header bg-warning bg-opacity-25 d-flex justify-content-between align-items-center">
+              <span class="fw-bold"><i class="bi bi-exclamation-triangle me-2"></i>Stock & Supply Alerts</span>
+              <a href="#" class="small" data-page-link="supply-chain">Manage supply chain</a>
+            </div>
+            <div class="card-body py-3" id="ownerStockAlertsBody">
+              <?php if ($openPos > 0): ?>
+                <p class="mb-2"><strong><?= $openPos ?></strong> purchase order(s) awaiting receipt
+                  (₱<?= number_format((float)($supplyAlerts['pending_po_value'] ?? 0), 2) ?> pending).</p>
+              <?php endif; ?>
+              <?php if (count($lowMaterials) > 0): ?>
+                <p class="mb-1 fw-semibold">Low materials:</p>
+                <ul class="small mb-2">
+                  <?php foreach ($lowMaterials as $m): ?>
+                    <li><?= htmlspecialchars((string)($m['Item_Name'] ?? '')) ?> —
+                      <?= number_format((float)($m['Stock_Quantity'] ?? 0), 2) ?>
+                      <?= htmlspecialchars((string)($m['Unit'] ?? '')) ?>
+                      (reorder <?= number_format((float)($m['Reorder_Level'] ?? 0), 2) ?>)</li>
+                  <?php endforeach; ?>
+                </ul>
+              <?php endif; ?>
+              <?php if (count($lowProducts) > 0): ?>
+                <p class="mb-1 fw-semibold">Low menu products:</p>
+                <ul class="small mb-0">
+                  <?php foreach ($lowProducts as $p): ?>
+                    <li><?= htmlspecialchars((string)($p['Product_Name'] ?? '')) ?> —
+                      <?= htmlspecialchars((string)($p['Low_Stock_Alert'] ?? '')) ?>
+                      (<?= (int)($p['Stock_Quantity'] ?? 0) ?> left)</li>
+                  <?php endforeach; ?>
+                </ul>
+              <?php endif; ?>
+            </div>
           </div>
         </div>
       </div>
@@ -1536,6 +1592,158 @@ $productPerformance = $ownerController->getProductPerformance();
       </div>
       </div>
     </div>
+    <!-- ==================== SUPPLY CHAIN ==================== -->
+    <div class="page" id="supply-chain">
+      <h4 class="mb-2" style="color:#4d2e00;font-weight:700;">Supply Chain</h4>
+      <p class="text-muted mb-4">Manage suppliers, raw materials, and purchase orders for café operations.</p>
+
+      <div class="row g-3 mb-4" id="supplySummaryCards">
+        <div class="col-6 col-md">
+          <div class="card shadow-sm border-0 h-100">
+            <div class="card-body py-3">
+              <small class="text-muted">Active Suppliers</small>
+              <h4 class="mb-0 fw-bold" id="scActiveSuppliers">0</h4>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md">
+          <div class="card shadow-sm border-0 h-100">
+            <div class="card-body py-3">
+              <small class="text-muted">Supply Items</small>
+              <h4 class="mb-0 fw-bold" id="scSupplyItems">0</h4>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md">
+          <div class="card shadow-sm border-0 h-100">
+            <div class="card-body py-3">
+              <small class="text-muted">Low Stock Items</small>
+              <h4 class="mb-0 fw-bold text-danger" id="scLowStock">0</h4>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md">
+          <div class="card shadow-sm border-0 h-100">
+            <div class="card-body py-3">
+              <small class="text-muted">Open POs</small>
+              <h4 class="mb-0 fw-bold" id="scOpenPos">0</h4>
+            </div>
+          </div>
+        </div>
+        <div class="col-12 col-md">
+          <div class="card shadow-sm border-0 h-100">
+            <div class="card-body py-3">
+              <small class="text-muted">Pending PO Value</small>
+              <h4 class="mb-0 fw-bold" id="scPendingValue">₱0.00</h4>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <ul class="nav nav-tabs mb-3" id="supplyChainTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" id="sc-tab-suppliers" data-bs-toggle="tab" data-bs-target="#sc-pane-suppliers" type="button">Suppliers</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="sc-tab-items" data-bs-toggle="tab" data-bs-target="#sc-pane-items" type="button">Materials</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="sc-tab-pos" data-bs-toggle="tab" data-bs-target="#sc-pane-pos" type="button">Purchase Orders</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="sc-tab-recipes" data-bs-toggle="tab" data-bs-target="#sc-pane-recipes" type="button">Recipes (BOM)</button>
+        </li>
+      </ul>
+
+      <div class="tab-content">
+        <div class="tab-pane fade show active" id="sc-pane-suppliers">
+          <div class="inventory-header">
+            <span class="text-muted">Vendors and delivery contacts</span>
+            <button type="button" class="add-product-btn" id="scAddSupplierBtn">Add Supplier</button>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle" id="scSuppliersTable">
+              <thead style="background:#f8f9fa;">
+                <tr>
+                  <th>Name</th>
+                  <th>Contact</th>
+                  <th>Phone</th>
+                  <th>Status</th>
+                  <th style="width:120px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody><tr><td colspan="5" class="text-center text-muted py-4">Loading suppliers...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tab-pane fade" id="sc-pane-items">
+          <div class="inventory-header">
+            <span class="text-muted">Ingredients and supplies (not menu products)</span>
+            <button type="button" class="add-product-btn" id="scAddItemBtn">Add Material</button>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle" id="scItemsTable">
+              <thead style="background:#f8f9fa;">
+                <tr>
+                  <th>Item</th>
+                  <th>Category</th>
+                  <th>Stock</th>
+                  <th>Reorder</th>
+                  <th>Unit Cost</th>
+                  <th>Supplier</th>
+                  <th>Alert</th>
+                  <th style="width:120px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody><tr><td colspan="8" class="text-center text-muted py-4">Loading materials...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tab-pane fade" id="sc-pane-recipes">
+          <div class="inventory-header">
+            <span class="text-muted">Link menu products to materials used per serving</span>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Menu Product</label>
+              <select class="form-select" id="scRecipeProduct"></select>
+            </div>
+            <div class="col-md-6 d-flex align-items-end">
+              <button type="button" class="add-product-btn" id="scAddRecipeLineBtn">Add Ingredient Line</button>
+            </div>
+          </div>
+          <div id="scRecipeLines"></div>
+          <button type="button" class="btn btn-primary mt-3" id="scSaveRecipeBtn" style="background:#4d2e00;border:none;">Save Recipe</button>
+          <p class="text-muted small mt-2 mb-0">When customers or staff sell a product with a recipe, material stock is checked and deducted automatically.</p>
+        </div>
+
+        <div class="tab-pane fade" id="sc-pane-pos">
+          <div class="inventory-header">
+            <span class="text-muted">Orders to restock materials</span>
+            <button type="button" class="add-product-btn" id="scAddPoBtn">New Purchase Order</button>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle" id="scPoTable">
+              <thead style="background:#f8f9fa;">
+                <tr>
+                  <th>PO #</th>
+                  <th>Supplier</th>
+                  <th>Order Date</th>
+                  <th>Expected</th>
+                  <th>Lines</th>
+                  <th>Total</th>
+                  <th>Status</th>
+                  <th style="width:200px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody><tr><td colspan="8" class="text-center text-muted py-4">Loading purchase orders...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
     <!-- ==================== SYSTEM HISTORY ==================== -->
     <div class="page" id="history">
       <div class="d-flex flex-column flex-lg-row flex-wrap justify-content-between align-items-lg-center mb-4 gap-3">
@@ -1578,6 +1786,132 @@ $productPerformance = $ownerController->getProductPerformance();
       </div>
     </div>
   </div>
+
+  <!-- Supply Chain Modals -->
+  <div class="modal fade" id="scSupplierModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="scSupplierModalTitle">Add Supplier</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="scSupplierForm">
+            <input type="hidden" id="scSupplierId" value="">
+            <div class="mb-3"><label class="form-label">Supplier Name *</label><input type="text" class="form-control" id="scSupplierName" required></div>
+            <div class="mb-3"><label class="form-label">Contact Person</label><input type="text" class="form-control" id="scSupplierContact"></div>
+            <div class="row g-2">
+              <div class="col-md-6 mb-3"><label class="form-label">Email</label><input type="email" class="form-control" id="scSupplierEmail"></div>
+              <div class="col-md-6 mb-3"><label class="form-label">Phone</label><input type="text" class="form-control" id="scSupplierPhone"></div>
+            </div>
+            <div class="mb-3"><label class="form-label">Address</label><input type="text" class="form-control" id="scSupplierAddress"></div>
+            <div class="mb-3">
+              <label class="form-label">Status</label>
+              <select class="form-select" id="scSupplierStatus"><option value="Active">Active</option><option value="Inactive">Inactive</option></select>
+            </div>
+            <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" id="scSupplierNotes" rows="2"></textarea></div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="scSaveSupplierBtn" style="background:#4d2e00;border:none;">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="scItemModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="scItemModalTitle">Add Material</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="scItemForm">
+            <input type="hidden" id="scItemId" value="">
+            <div class="mb-3"><label class="form-label">Item Name *</label><input type="text" class="form-control" id="scItemName" required></div>
+            <div class="row g-2">
+              <div class="col-md-6 mb-3"><label class="form-label">Category</label><input type="text" class="form-control" id="scItemCategory" value="General"></div>
+              <div class="col-md-6 mb-3"><label class="form-label">Unit</label><input type="text" class="form-control" id="scItemUnit" value="pcs"></div>
+            </div>
+            <div class="row g-2">
+              <div class="col-md-4 mb-3"><label class="form-label">Stock</label><input type="number" step="0.01" min="0" class="form-control" id="scItemStock" value="0"></div>
+              <div class="col-md-4 mb-3"><label class="form-label">Reorder Level</label><input type="number" step="0.01" min="0" class="form-control" id="scItemReorder" value="0"></div>
+              <div class="col-md-4 mb-3"><label class="form-label">Unit Cost (₱)</label><input type="number" step="0.01" min="0" class="form-control" id="scItemCost" value="0"></div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Preferred Supplier</label>
+              <select class="form-select" id="scItemSupplier"><option value="">— None —</option></select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Status</label>
+              <select class="form-select" id="scItemStatus"><option value="Active">Active</option><option value="Inactive">Inactive</option></select>
+            </div>
+            <div class="mb-3"><label class="form-label">Notes</label><input type="text" class="form-control" id="scItemNotes"></div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="scSaveItemBtn" style="background:#4d2e00;border:none;">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="scPoModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">New Purchase Order</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-2 mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Supplier *</label>
+              <select class="form-select" id="scPoSupplier" required></select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Order Date</label>
+              <input type="date" class="form-control" id="scPoOrderDate">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Expected Delivery</label>
+              <input type="date" class="form-control" id="scPoExpected">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Notes</label>
+            <input type="text" class="form-control" id="scPoNotes">
+          </div>
+          <h6>Line Items</h6>
+          <div id="scPoLines"></div>
+          <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="scAddPoLineBtn"><i class="bi bi-plus"></i> Add line</button>
+          <p class="text-muted small mt-2 mb-0">Marking as received on create will add stock immediately.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-outline-primary" id="scSavePoDraftBtn">Save as Draft</button>
+          <button type="button" class="btn btn-primary" id="scSavePoBtn" style="background:#4d2e00;border:none;">Place Order</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="scPoDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="scPoDetailTitle">Purchase Order</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="scPoDetailBody"></div>
+        <div class="modal-footer" id="scPoDetailFooter"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- ADD / EDIT PRODUCT MODAL (LOW STOCK AUTO COMPUTE, CHANGES 11-16-25) -->
   <div class="modal fade" id="productModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -2756,6 +3090,9 @@ $productPerformance = $ownerController->getProductPerformance();
       if (targetId === 'ai-analytics' && typeof loadAiAnalytics === 'function') {
         loadAiAnalytics(false);
       }
+      if (targetId === 'supply-chain' && typeof loadSupplyChain === 'function') {
+        loadSupplyChain();
+      }
       if (pushStateEnabled) {
         history.pushState({}, '', `?page=${targetId}`);
       }
@@ -2772,6 +3109,48 @@ $productPerformance = $ownerController->getProductPerformance();
       });
     });
     const dashboardStats = <?= json_encode($dashboardStats, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+
+    function renderOwnerStockAlerts(alerts) {
+      const row = document.getElementById('ownerStockAlertsRow');
+      const body = document.getElementById('ownerStockAlertsBody');
+      if (!row || !body) return;
+      const materials = alerts?.low_stock_materials || [];
+      const products = alerts?.low_stock_products || [];
+      const openPos = alerts?.open_purchase_orders || 0;
+      if (!materials.length && !products.length && !openPos) {
+        row.style.display = 'none';
+        return;
+      }
+      row.style.display = '';
+      let html = '';
+      if (openPos > 0) {
+        const pending = Number(alerts.pending_po_value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
+        html += `<p class="mb-2"><strong>${openPos}</strong> purchase order(s) awaiting receipt (₱${pending} pending).</p>`;
+      }
+      if (materials.length) {
+        html += '<p class="mb-1 fw-semibold">Low materials:</p><ul class="small mb-2">';
+        materials.forEach(m => {
+          html += `<li>${m.Item_Name} — ${Number(m.Stock_Quantity).toFixed(2)} ${m.Unit || ''} (reorder ${Number(m.Reorder_Level).toFixed(2)})</li>`;
+        });
+        html += '</ul>';
+      }
+      if (products.length) {
+        html += '<p class="mb-1 fw-semibold">Low menu products:</p><ul class="small mb-0">';
+        products.forEach(p => {
+          html += `<li>${p.Product_Name} — ${p.Low_Stock_Alert} (${p.Stock_Quantity} left)</li>`;
+        });
+        html += '</ul>';
+      }
+      body.innerHTML = html;
+    }
+    renderOwnerStockAlerts(dashboardStats.supply_alerts);
+
+    document.querySelectorAll('[data-page-link="supply-chain"]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        showPage('supply-chain');
+      });
+    });
     const ownerUserId = <?= (int)($current_user['User_ID'] ?? 0) ?>;
     const performanceData = <?= json_encode($productPerformance, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
     let inventory = <?= json_encode($inventoryData, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
@@ -4351,6 +4730,465 @@ $productPerformance = $ownerController->getProductPerformance();
     }
   });
 }
+
+// ==================== Supply Chain ====================
+(function supplyChainModule() {
+  const scState = { suppliers: [], items: [], pos: [], recipeProducts: [] };
+  const supplierModal = document.getElementById('scSupplierModal') ? bootstrap.Modal.getOrCreateInstance(document.getElementById('scSupplierModal')) : null;
+  const itemModal = document.getElementById('scItemModal') ? bootstrap.Modal.getOrCreateInstance(document.getElementById('scItemModal')) : null;
+  const poModal = document.getElementById('scPoModal') ? bootstrap.Modal.getOrCreateInstance(document.getElementById('scPoModal')) : null;
+  const poDetailModal = document.getElementById('scPoDetailModal') ? bootstrap.Modal.getOrCreateInstance(document.getElementById('scPoDetailModal')) : null;
+
+  function esc(s) {
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  async function scFetch(action, options = {}) {
+    const method = options.method || 'GET';
+    let url = '?action=' + encodeURIComponent(action);
+    const init = { method, cache: 'no-store' };
+    if (method === 'POST') {
+      if (options.json) {
+        init.headers = { 'Content-Type': 'application/json' };
+        init.body = JSON.stringify(options.json);
+      } else if (options.body) {
+        init.body = options.body;
+      }
+    }
+    const res = await fetch(url, init);
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') {
+      throw new Error(data.message || 'Supply chain request failed.');
+    }
+    return data;
+  }
+
+  function fillSupplierSelects() {
+    const opts = scState.suppliers
+      .filter(s => (s.Status || '') === 'Active')
+      .map(s => `<option value="${s.Supplier_ID}">${esc(s.Supplier_Name)}</option>`)
+      .join('');
+    ['scItemSupplier', 'scPoSupplier'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const current = el.value;
+      el.innerHTML = (id === 'scItemSupplier' ? '<option value="">— None —</option>' : '<option value="">Select supplier</option>') + opts;
+      if (current) el.value = current;
+    });
+  }
+
+  function renderSummary(summary) {
+    const fmt = n => '₱' + Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const map = {
+      scActiveSuppliers: summary.active_suppliers,
+      scSupplyItems: summary.supply_items,
+      scLowStock: summary.low_stock_items,
+      scOpenPos: summary.open_purchase_orders,
+      scPendingValue: fmt(summary.pending_po_value)
+    };
+    Object.entries(map).forEach(([id, val]) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val;
+    });
+  }
+
+  function renderSuppliers() {
+    const tbody = document.querySelector('#scSuppliersTable tbody');
+    if (!tbody) return;
+    if (!scState.suppliers.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No suppliers yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = scState.suppliers.map(s => `
+      <tr>
+        <td><strong>${esc(s.Supplier_Name)}</strong><br><small class="text-muted">${esc(s.Email || '')}</small></td>
+        <td>${esc(s.Contact_Person || '—')}</td>
+        <td>${esc(s.Phone || '—')}</td>
+        <td><span class="badge ${s.Status === 'Active' ? 'bg-success' : 'bg-secondary'}">${esc(s.Status)}</span></td>
+        <td>
+          <button type="button" class="btn btn-sm btn-outline-secondary sc-edit-supplier" data-id="${s.Supplier_ID}">Edit</button>
+          <button type="button" class="btn btn-sm btn-outline-danger sc-del-supplier" data-id="${s.Supplier_ID}">Delete</button>
+        </td>
+      </tr>`).join('');
+  }
+
+  function renderItems() {
+    const tbody = document.querySelector('#scItemsTable tbody');
+    if (!tbody) return;
+    if (!scState.items.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No materials yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = scState.items.map(i => `
+      <tr>
+        <td><strong>${esc(i.Item_Name)}</strong> <small class="text-muted">(${esc(i.Unit)})</small></td>
+        <td>${esc(i.Category)}</td>
+        <td>${Number(i.Stock_Quantity).toFixed(2)}</td>
+        <td>${Number(i.Reorder_Level).toFixed(2)}</td>
+        <td>₱${Number(i.Unit_Cost).toFixed(2)}</td>
+        <td>${esc(i.Supplier_Name || '—')}</td>
+        <td><span class="badge ${i.Stock_Alert === 'Low' ? 'bg-danger' : 'bg-success'}">${esc(i.Stock_Alert)}</span></td>
+        <td>
+          <button type="button" class="btn btn-sm btn-outline-secondary sc-edit-item" data-id="${i.Item_ID}">Edit</button>
+          <button type="button" class="btn btn-sm btn-outline-danger sc-del-item" data-id="${i.Item_ID}">Delete</button>
+        </td>
+      </tr>`).join('');
+  }
+
+  function renderPos() {
+    const tbody = document.querySelector('#scPoTable tbody');
+    if (!tbody) return;
+    if (!scState.pos.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No purchase orders yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = scState.pos.map(po => {
+      const actions = [];
+      if (['Draft', 'Ordered', 'Partial'].includes(po.Status)) {
+        if (po.Status === 'Draft') actions.push(`<button type="button" class="btn btn-sm btn-outline-primary sc-po-status" data-id="${po.PO_ID}" data-status="Ordered">Mark Ordered</button>`);
+        actions.push(`<button type="button" class="btn btn-sm btn-success sc-po-status" data-id="${po.PO_ID}" data-status="Received">Receive</button>`);
+        actions.push(`<button type="button" class="btn btn-sm btn-outline-danger sc-po-status" data-id="${po.PO_ID}" data-status="Cancelled">Cancel</button>`);
+      }
+      actions.push(`<button type="button" class="btn btn-sm btn-link sc-po-view" data-id="${po.PO_ID}">View</button>`);
+      return `<tr>
+        <td>#${po.PO_ID}</td>
+        <td>${esc(po.Supplier_Name)}</td>
+        <td>${esc(po.Order_Date)}</td>
+        <td>${esc(po.Expected_Delivery || '—')}</td>
+        <td>${po.Line_Count}</td>
+        <td>₱${Number(po.Total_Amount).toFixed(2)}</td>
+        <td><span class="badge bg-secondary">${esc(po.Status)}</span></td>
+        <td class="d-flex flex-wrap gap-1">${actions.join('')}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  window.loadSupplyChain = async function loadSupplyChain() {
+    try {
+      const [summary, suppliers, items, pos, products] = await Promise.all([
+        scFetch('supply-summary'),
+        scFetch('supply-suppliers'),
+        scFetch('supply-items'),
+        scFetch('supply-purchase-orders'),
+        scFetch('supply-products-recipes')
+      ]);
+      renderSummary(summary.data || {});
+      scState.suppliers = suppliers.data || [];
+      scState.items = items.data || [];
+      scState.pos = pos.data || [];
+      scState.recipeProducts = products.data || [];
+      fillSupplierSelects();
+      renderSuppliers();
+      renderItems();
+      renderPos();
+      populateRecipeProductSelect();
+      try {
+        const alertRes = await scFetch('supply-stock-alerts');
+        if (typeof renderOwnerStockAlerts === 'function') {
+          renderOwnerStockAlerts(alertRes.data || {});
+        }
+      } catch (_) { /* optional refresh */ }
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  function populateRecipeProductSelect() {
+    const sel = document.getElementById('scRecipeProduct');
+    if (!sel) return;
+    const current = sel.value;
+    sel.innerHTML = (scState.recipeProducts || []).map(p =>
+      `<option value="${p.Product_ID}">${esc(p.Product_Name)} (${p.Recipe_Lines || 0} lines)</option>`
+    ).join('');
+    if (current) sel.value = current;
+    loadRecipeForSelectedProduct();
+  }
+
+  function buildRecipeLineRow(line) {
+    const itemOpts = (scState.items || [])
+      .filter(i => (i.Status || '') === 'Active')
+      .map(i => `<option value="${i.Item_ID}" ${line && String(line.Item_ID) === String(i.Item_ID) ? 'selected' : ''}>${esc(i.Item_Name)} (${esc(i.Unit)})</option>`)
+      .join('');
+    const row = document.createElement('div');
+    row.className = 'row g-2 align-items-end mb-2 sc-recipe-line';
+    row.innerHTML = `
+      <div class="col-md-7"><select class="form-select sc-recipe-item" required><option value="">Material</option>${itemOpts}</select></div>
+      <div class="col-md-4"><input type="number" class="form-control sc-recipe-qty" min="0.001" step="0.001" placeholder="Qty per serving" value="${line ? line.Quantity_Per_Serving : '1'}" required></div>
+      <div class="col-md-1"><button type="button" class="btn btn-sm btn-outline-danger sc-recipe-remove">&times;</button></div>`;
+    row.querySelector('.sc-recipe-remove')?.addEventListener('click', () => row.remove());
+    return row;
+  }
+
+  async function loadRecipeForSelectedProduct() {
+    const productId = parseInt(document.getElementById('scRecipeProduct')?.value || '0', 10);
+    const container = document.getElementById('scRecipeLines');
+    if (!container || productId <= 0) return;
+    container.innerHTML = '<p class="text-muted small">Loading recipe...</p>';
+    try {
+      const res = await fetch('?action=supply-recipe&product_id=' + productId);
+      const data = await res.json();
+      const lines = data.status === 'success' ? (data.data || []) : [];
+      container.innerHTML = '';
+      if (!lines.length) {
+        container.appendChild(buildRecipeLineRow(null));
+      } else {
+        lines.forEach(line => container.appendChild(buildRecipeLineRow(line)));
+      }
+    } catch (e) {
+      container.innerHTML = '<p class="text-danger small">' + esc(e.message) + '</p>';
+    }
+  }
+
+  document.getElementById('scRecipeProduct')?.addEventListener('change', loadRecipeForSelectedProduct);
+  document.getElementById('scAddRecipeLineBtn')?.addEventListener('click', () => {
+    document.getElementById('scRecipeLines')?.appendChild(buildRecipeLineRow(null));
+  });
+  document.getElementById('scSaveRecipeBtn')?.addEventListener('click', async () => {
+    const productId = parseInt(document.getElementById('scRecipeProduct')?.value || '0', 10);
+    const lines = [];
+    document.querySelectorAll('.sc-recipe-line').forEach(row => {
+      const itemId = row.querySelector('.sc-recipe-item')?.value;
+      const qty = parseFloat(row.querySelector('.sc-recipe-qty')?.value || '0');
+      if (itemId && qty > 0) lines.push({ Item_ID: parseInt(itemId, 10), Quantity_Per_Serving: qty });
+    });
+    try {
+      await scFetch('supply-save-recipe', {
+        method: 'POST',
+        json: { Product_ID: productId, lines }
+      });
+      alert('Recipe saved.');
+      const products = await scFetch('supply-products-recipes');
+      scState.recipeProducts = products.data || [];
+      populateRecipeProductSelect();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+
+  function openSupplierForm(supplier) {
+    document.getElementById('scSupplierModalTitle').textContent = supplier ? 'Edit Supplier' : 'Add Supplier';
+    document.getElementById('scSupplierId').value = supplier ? supplier.Supplier_ID : '';
+    document.getElementById('scSupplierName').value = supplier?.Supplier_Name || '';
+    document.getElementById('scSupplierContact').value = supplier?.Contact_Person || '';
+    document.getElementById('scSupplierEmail').value = supplier?.Email || '';
+    document.getElementById('scSupplierPhone').value = supplier?.Phone || '';
+    document.getElementById('scSupplierAddress').value = supplier?.Address || '';
+    document.getElementById('scSupplierStatus').value = supplier?.Status || 'Active';
+    document.getElementById('scSupplierNotes').value = supplier?.Notes || '';
+    supplierModal?.show();
+  }
+
+  function openItemForm(item) {
+    fillSupplierSelects();
+    document.getElementById('scItemModalTitle').textContent = item ? 'Edit Material' : 'Add Material';
+    document.getElementById('scItemId').value = item ? item.Item_ID : '';
+    document.getElementById('scItemName').value = item?.Item_Name || '';
+    document.getElementById('scItemCategory').value = item?.Category || 'General';
+    document.getElementById('scItemUnit').value = item?.Unit || 'pcs';
+    document.getElementById('scItemStock').value = item?.Stock_Quantity ?? 0;
+    document.getElementById('scItemReorder').value = item?.Reorder_Level ?? 0;
+    document.getElementById('scItemCost').value = item?.Unit_Cost ?? 0;
+    document.getElementById('scItemSupplier').value = item?.Supplier_ID || '';
+    document.getElementById('scItemStatus').value = item?.Status || 'Active';
+    document.getElementById('scItemNotes').value = item?.Notes || '';
+    itemModal?.show();
+  }
+
+  function buildPoLineRow() {
+    const itemOpts = scState.items
+      .filter(i => (i.Status || '') === 'Active')
+      .map(i => `<option value="${i.Item_ID}" data-cost="${i.Unit_Cost}">${esc(i.Item_Name)} (${esc(i.Unit)})</option>`)
+      .join('');
+    const row = document.createElement('div');
+    row.className = 'row g-2 align-items-end mb-2 sc-po-line';
+    row.innerHTML = `
+      <div class="col-md-5"><select class="form-select sc-po-line-item" required><option value="">Material</option>${itemOpts}</select></div>
+      <div class="col-md-3"><input type="number" class="form-control sc-po-line-qty" min="0.01" step="0.01" placeholder="Qty" required></div>
+      <div class="col-md-3"><input type="number" class="form-control sc-po-line-cost" min="0" step="0.01" placeholder="Unit cost" required></div>
+      <div class="col-md-1"><button type="button" class="btn btn-sm btn-outline-danger sc-po-line-remove">&times;</button></div>`;
+    row.querySelector('.sc-po-line-item')?.addEventListener('change', function () {
+      const cost = this.selectedOptions[0]?.dataset?.cost;
+      if (cost) row.querySelector('.sc-po-line-cost').value = cost;
+    });
+    row.querySelector('.sc-po-line-remove')?.addEventListener('click', () => row.remove());
+    return row;
+  }
+
+  function openPoForm() {
+    fillSupplierSelects();
+    document.getElementById('scPoOrderDate').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('scPoExpected').value = '';
+    document.getElementById('scPoNotes').value = '';
+    const lines = document.getElementById('scPoLines');
+    if (lines) {
+      lines.innerHTML = '';
+      lines.appendChild(buildPoLineRow());
+    }
+    poModal?.show();
+  }
+
+  async function savePurchaseOrder(status) {
+    const supplierId = document.getElementById('scPoSupplier')?.value;
+    if (!supplierId) { alert('Select a supplier.'); return; }
+    const lines = [];
+    document.querySelectorAll('.sc-po-line').forEach(row => {
+      const itemId = row.querySelector('.sc-po-line-item')?.value;
+      const qty = parseFloat(row.querySelector('.sc-po-line-qty')?.value || '0');
+      const cost = parseFloat(row.querySelector('.sc-po-line-cost')?.value || '0');
+      if (itemId && qty > 0) lines.push({ Item_ID: parseInt(itemId, 10), Quantity_Ordered: qty, Unit_Cost: cost });
+    });
+    if (!lines.length) { alert('Add at least one line item.'); return; }
+    await scFetch('supply-create-purchase-order', {
+      method: 'POST',
+      json: {
+        Supplier_ID: parseInt(supplierId, 10),
+        Order_Date: document.getElementById('scPoOrderDate')?.value,
+        Expected_Delivery: document.getElementById('scPoExpected')?.value || '',
+        Notes: document.getElementById('scPoNotes')?.value || '',
+        Status: status,
+        lines
+      }
+    });
+    poModal?.hide();
+    await loadSupplyChain();
+  }
+
+  document.getElementById('scAddSupplierBtn')?.addEventListener('click', () => openSupplierForm(null));
+  document.getElementById('scAddItemBtn')?.addEventListener('click', () => openItemForm(null));
+  document.getElementById('scAddPoBtn')?.addEventListener('click', openPoForm);
+  document.getElementById('scAddPoLineBtn')?.addEventListener('click', () => {
+    document.getElementById('scPoLines')?.appendChild(buildPoLineRow());
+  });
+  document.getElementById('scSavePoBtn')?.addEventListener('click', () => savePurchaseOrder('Ordered').catch(e => alert(e.message)));
+  document.getElementById('scSavePoDraftBtn')?.addEventListener('click', () => savePurchaseOrder('Draft').catch(e => alert(e.message)));
+
+  document.getElementById('scSaveSupplierBtn')?.addEventListener('click', async () => {
+    const id = document.getElementById('scSupplierId').value;
+    const payload = {
+      Supplier_Name: document.getElementById('scSupplierName').value.trim(),
+      Contact_Person: document.getElementById('scSupplierContact').value.trim(),
+      Email: document.getElementById('scSupplierEmail').value.trim(),
+      Phone: document.getElementById('scSupplierPhone').value.trim(),
+      Address: document.getElementById('scSupplierAddress').value.trim(),
+      Status: document.getElementById('scSupplierStatus').value,
+      Notes: document.getElementById('scSupplierNotes').value.trim()
+    };
+    try {
+      if (id) {
+        payload.Supplier_ID = parseInt(id, 10);
+        const fd = new FormData();
+        fd.append('action', 'supply-update-supplier');
+        Object.entries(payload).forEach(([k, v]) => fd.append(k, v));
+        await scFetch('supply-update-supplier', { method: 'POST', body: fd });
+      } else {
+        await scFetch('supply-create-supplier', { method: 'POST', body: (() => {
+          const fd = new FormData();
+          fd.append('action', 'supply-create-supplier');
+          Object.entries(payload).forEach(([k, v]) => fd.append(k, v));
+          return fd;
+        })() });
+      }
+      supplierModal?.hide();
+      await loadSupplyChain();
+    } catch (e) { alert(e.message); }
+  });
+
+  document.getElementById('scSaveItemBtn')?.addEventListener('click', async () => {
+    const id = document.getElementById('scItemId').value;
+    const payload = {
+      Item_Name: document.getElementById('scItemName').value.trim(),
+      Category: document.getElementById('scItemCategory').value.trim(),
+      Unit: document.getElementById('scItemUnit').value.trim(),
+      Stock_Quantity: document.getElementById('scItemStock').value,
+      Reorder_Level: document.getElementById('scItemReorder').value,
+      Unit_Cost: document.getElementById('scItemCost').value,
+      Supplier_ID: document.getElementById('scItemSupplier').value,
+      Status: document.getElementById('scItemStatus').value,
+      Notes: document.getElementById('scItemNotes').value.trim()
+    };
+    try {
+      const fd = new FormData();
+      fd.append('action', id ? 'supply-update-item' : 'supply-create-item');
+      if (id) payload.Item_ID = parseInt(id, 10);
+      Object.entries(payload).forEach(([k, v]) => fd.append(k, v));
+      await scFetch(fd.get('action'), { method: 'POST', body: fd });
+      itemModal?.hide();
+      await loadSupplyChain();
+    } catch (e) { alert(e.message); }
+  });
+
+  document.getElementById('supply-chain')?.addEventListener('click', async (e) => {
+    const editSup = e.target.closest('.sc-edit-supplier');
+    if (editSup) {
+      const s = scState.suppliers.find(x => String(x.Supplier_ID) === editSup.dataset.id);
+      if (s) openSupplierForm(s);
+      return;
+    }
+    const delSup = e.target.closest('.sc-del-supplier');
+    if (delSup && confirm('Delete this supplier?')) {
+      const fd = new FormData();
+      fd.append('action', 'supply-delete-supplier');
+      fd.append('Supplier_ID', delSup.dataset.id);
+      try { await scFetch('supply-delete-supplier', { method: 'POST', body: fd }); await loadSupplyChain(); }
+      catch (err) { alert(err.message); }
+      return;
+    }
+    const editItem = e.target.closest('.sc-edit-item');
+    if (editItem) {
+      const item = scState.items.find(x => String(x.Item_ID) === editItem.dataset.id);
+      if (item) openItemForm(item);
+      return;
+    }
+    const delItem = e.target.closest('.sc-del-item');
+    if (delItem && confirm('Delete this material?')) {
+      const fd = new FormData();
+      fd.append('action', 'supply-delete-item');
+      fd.append('Item_ID', delItem.dataset.id);
+      try { await scFetch('supply-delete-item', { method: 'POST', body: fd }); await loadSupplyChain(); }
+      catch (err) { alert(err.message); }
+      return;
+    }
+    const poStatus = e.target.closest('.sc-po-status');
+    if (poStatus) {
+      const status = poStatus.dataset.status;
+      const msg = status === 'Received' ? 'Receive stock for this PO?' : `Set PO to ${status}?`;
+      if (!confirm(msg)) return;
+      try {
+        await scFetch('supply-update-po-status', {
+          method: 'POST',
+          json: { PO_ID: parseInt(poStatus.dataset.id, 10), Status: status }
+        });
+        await loadSupplyChain();
+      } catch (err) { alert(err.message); }
+      return;
+    }
+    const poView = e.target.closest('.sc-po-view');
+    if (poView) {
+      try {
+        const res = await fetch('?action=supply-purchase-order-detail&po_id=' + poView.dataset.id);
+        const data = await res.json();
+        if (data.status !== 'success') throw new Error(data.message);
+        const po = data.data;
+        document.getElementById('scPoDetailTitle').textContent = 'PO #' + po.PO_ID + ' — ' + (po.Supplier_Name || '');
+        const lineRows = (po.lines || []).map(l =>
+          `<tr><td>${esc(l.Item_Name)}</td><td>${Number(l.Quantity_Ordered).toFixed(2)}</td><td>${Number(l.Quantity_Received).toFixed(2)}</td><td>₱${Number(l.Unit_Cost).toFixed(2)}</td></tr>`
+        ).join('');
+        document.getElementById('scPoDetailBody').innerHTML = `
+          <p><strong>Status:</strong> ${esc(po.Status)} &nbsp; <strong>Total:</strong> ₱${Number(po.Total_Amount).toFixed(2)}</p>
+          <p class="text-muted mb-3">${esc(po.Notes || '')}</p>
+          <table class="table table-sm"><thead><tr><th>Item</th><th>Ordered</th><th>Received</th><th>Unit Cost</th></tr></thead><tbody>${lineRows}</tbody></table>`;
+        document.getElementById('scPoDetailFooter').innerHTML = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>';
+        poDetailModal?.show();
+      } catch (err) { alert(err.message); }
+    }
+  });
+
+  const urlPage = new URLSearchParams(window.location.search).get('page');
+  if (urlPage === 'supply-chain') {
+    setTimeout(() => loadSupplyChain(), 300);
+  }
+})();
 </script>
 </body>
 </html>

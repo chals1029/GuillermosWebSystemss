@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../Config.php';
+require_once __DIR__ . '/SupplyChainService.php';
 
 class OwnerController
 {
@@ -324,7 +325,7 @@ class OwnerController
         $weeklySummary = $this->getWeeklyOrderSummary();
         $monthlySummary = $this->getMonthlyOrderSummary();
 
-        return [
+        $stats = [
             'total_customers' => $this->countCustomers(),
             'total_orders' => $this->countOrders(),
             'total_delivered' => $this->countDeliveredOrders(),
@@ -340,6 +341,28 @@ class OwnerController
             'orders_monthly' => $monthlySummary['orders'],
             'revenue_monthly' => $monthlySummary['revenue'],
         ];
+
+        try {
+            if (SupplyChainService::baseTablesReady($this->conn)) {
+                $stats['supply_alerts'] = (new SupplyChainService($this->conn))->getStockAlerts();
+            } else {
+                $stats['supply_alerts'] = [
+                    'low_stock_materials' => [],
+                    'low_stock_products' => [],
+                    'open_purchase_orders' => 0,
+                    'pending_po_value' => 0.0,
+                ];
+            }
+        } catch (\Throwable $e) {
+            $stats['supply_alerts'] = [
+                'low_stock_materials' => [],
+                'low_stock_products' => [],
+                'open_purchase_orders' => 0,
+                'pending_po_value' => 0.0,
+            ];
+        }
+
+        return $stats;
     }
 
    public function getInventory(?string $category = null): array

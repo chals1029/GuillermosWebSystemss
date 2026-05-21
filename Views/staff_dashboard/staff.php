@@ -9,7 +9,27 @@ if (!isset($_SESSION['user_role']) || strtolower($_SESSION['user_role']) !== 'st
 }
 
 require_once __DIR__ . '/../../Controllers/StaffController.php';
+require_once __DIR__ . '/../../Controllers/SupplyChainController.php';
 require_once __DIR__ . '/../../Controllers/Security/DdosGuard.php';
+
+$staffSupplyAction = (string)($_GET['action'] ?? $_POST['action'] ?? '');
+if ((isset($_GET['action']) || isset($_POST['action'])) && strpos($staffSupplyAction, 'supply-') === 0) {
+    if (!DdosGuard::protect([
+        'scope' => 'staff_dashboard',
+        'max_requests' => (int)(getenv('STAFF_DDOS_MAX_REQUESTS') ?: 120),
+        'window_seconds' => (int)(getenv('STAFF_DDOS_WINDOW_SECONDS') ?: 60),
+        'block_seconds' => (int)(getenv('STAFF_DDOS_BLOCK_SECONDS') ?: 180),
+        'request_methods' => ['GET', 'POST'],
+        'response_type' => 'json',
+        'message' => 'Too many staff requests detected. Please wait and try again.',
+        'exit_on_block' => false,
+    ])) {
+        exit;
+    }
+    ob_start();
+    (new SupplyChainController())->handleAjax();
+    exit;
+}
 
 if (isset($_GET['action']) || isset($_POST['action'])) {
     if (!DdosGuard::protect([
@@ -882,6 +902,9 @@ if (isset($_SESSION['user_id'])) {
           <button class="menu-panel-btn" id="nav-inventory" onclick="document.getElementById('menuPanel').classList.remove('show'); showContent('inventory')">
             <i class="bi bi-archive"></i> <span>Products</span>
           </button>
+          <button class="menu-panel-btn" id="nav-supply-chain" onclick="document.getElementById('menuPanel').classList.remove('show'); showContent('supply-chain')">
+            <i class="bi bi-truck"></i> <span>Receive Stock (PO)</span>
+          </button>
         </div>
       </div>
 
@@ -984,6 +1007,13 @@ if (isset($_SESSION['user_id'])) {
     </div>
   </div>
 </div>
+
+      <div class="card shadow-sm mb-4 border-warning" id="staffStockAlertsCard" style="display:none;">
+        <div class="card-header bg-warning bg-opacity-25 fw-bold">
+          <i class="bi bi-exclamation-triangle me-2"></i> Low Stock Alerts
+        </div>
+        <div class="card-body py-3" id="staffStockAlertsBody"></div>
+      </div>
 
       <!-- Pending Orders Section -->
       <div class="card shadow-sm mb-4" id="recentOrdersCard">
@@ -1142,6 +1172,26 @@ if (isset($_SESSION['user_id'])) {
     </div>
 
     <!-- Process Bulk Section -->
+    <div id="supply-chain-section" style="display:none;">
+      <h4 class="mb-3" style="color:#4d2e00;font-weight:700;">Receive Purchase Orders</h4>
+      <p class="text-muted">Mark incoming supplier orders as received to add materials to stock.</p>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle" id="staffPoTable">
+          <thead style="background:#f8f9fa;">
+            <tr>
+              <th>PO #</th>
+              <th>Supplier</th>
+              <th>Order Date</th>
+              <th>Total</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody><tr><td colspan="6" class="text-center text-muted py-4">Loading purchase orders...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
     <div id="process-bulk-section" style="display:none;">
       <h4 class="mb-4">Process Bulk Orders</h4>
       
@@ -1587,7 +1637,7 @@ if (isset($_SESSION['user_id'])) {
     // Staff profile is read-only, no form submission needed
     // ---------- Section Navigation ----------
     function showContent(section) {
-      const sections = ['dashboard', 'process-bulk', 'advance-reservation', 'inventory'];
+      const sections = ['dashboard', 'process-bulk', 'advance-reservation', 'inventory', 'supply-chain'];
       sections.forEach(s => {
         const el = document.getElementById(s + '-section');
         if (el) el.style.display = 'none';
@@ -1605,6 +1655,9 @@ if (isset($_SESSION['user_id'])) {
           event.currentTarget.classList.add('active');
         }
       } catch (e) {}
+      if (section === 'supply-chain' && typeof loadStaffSupplyChain === 'function') {
+        loadStaffSupplyChain();
+      }
     }
     /* ---------- Live Clock ( Welcome Back, Owner) ---------- */
     function updateDateTime() {
@@ -1962,12 +2015,99 @@ if (isset($_SESSION['user_id'])) {
           document.getElementById('reserveCountCard').textContent = res.stats.pendingReservations;
           document.getElementById('onlineCountCard').textContent = res.stats.online;
           document.getElementById('revenueCard').textContent = '₱' + parseFloat(res.stats.revenue).toFixed(2);
+          if (res.stats.supply_alerts) {
+            renderStaffStockAlerts(res.stats.supply_alerts);
+          }
         }
       })
       .catch(err => {
         console.error('Error loading dashboard stats:', err);
       });
     }
+
+    function renderStaffStockAlerts(alerts) {
+      const card = document.getElementById('staffStockAlertsCard');
+      const body = document.getElementById('staffStockAlertsBody');
+      if (!card || !body) return;
+      const materials = alerts.low_stock_materials || [];
+      const products = alerts.low_stock_products || [];
+      const openPos = alerts.open_purchase_orders || 0;
+      if (!materials.length && !products.length && openPos === 0) {
+        card.style.display = 'none';
+        return;
+      }
+      card.style.display = 'block';
+      let html = '';
+      if (openPos > 0) {
+        html += `<p class="mb-2"><strong>${openPos}</strong> purchase order(s) awaiting receipt. <a href="#" onclick="showContent('supply-chain'); loadStaffSupplyChain(); return false;">View POs</a></p>`;
+      }
+      if (materials.length) {
+        html += '<p class="mb-1 fw-semibold">Low materials:</p><ul class="mb-2 small">';
+        materials.forEach(m => {
+          html += `<li>${m.Item_Name} — ${Number(m.Stock_Quantity).toFixed(2)} ${m.Unit || ''} (reorder ${Number(m.Reorder_Level).toFixed(2)})</li>`;
+        });
+        html += '</ul>';
+      }
+      if (products.length) {
+        html += '<p class="mb-1 fw-semibold">Low menu products:</p><ul class="mb-0 small">';
+        products.forEach(p => {
+          html += `<li>${p.Product_Name} — ${p.Low_Stock_Alert} (${p.Stock_Quantity} left)</li>`;
+        });
+        html += '</ul>';
+      }
+      body.innerHTML = html;
+    }
+
+    async function loadStaffSupplyChain() {
+      const tbody = document.querySelector('#staffPoTable tbody');
+      if (!tbody) return;
+      try {
+        const res = await fetch('?action=supply-purchase-orders', { cache: 'no-store' });
+        const data = await res.json();
+        if (data.status !== 'success') throw new Error(data.message);
+        const pos = (data.data || []).filter(po => ['Draft', 'Ordered', 'Partial'].includes(po.Status));
+        if (!pos.length) {
+          tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No purchase orders waiting for receipt.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = pos.map(po => `
+          <tr>
+            <td>#${po.PO_ID}</td>
+            <td>${po.Supplier_Name || ''}</td>
+            <td>${po.Order_Date || ''}</td>
+            <td>₱${Number(po.Total_Amount).toFixed(2)}</td>
+            <td><span class="badge bg-secondary">${po.Status}</span></td>
+            <td>
+              ${po.Status === 'Draft' ? `<button type="button" class="btn btn-sm btn-outline-primary staff-po-ordered" data-id="${po.PO_ID}">Mark Ordered</button> ` : ''}
+              <button type="button" class="btn btn-sm btn-success staff-po-receive" data-id="${po.PO_ID}">Receive</button>
+            </td>
+          </tr>`).join('');
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">${e.message}</td></tr>`;
+      }
+    }
+
+    document.getElementById('supply-chain-section')?.addEventListener('click', async (e) => {
+      const receive = e.target.closest('.staff-po-receive');
+      const ordered = e.target.closest('.staff-po-ordered');
+      const btn = receive || ordered;
+      if (!btn) return;
+      const status = receive ? 'Received' : 'Ordered';
+      if (!confirm(status === 'Received' ? 'Receive stock for this PO?' : 'Mark this PO as ordered?')) return;
+      try {
+        const res = await fetch('?action=supply-update-po-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ PO_ID: parseInt(btn.dataset.id, 10), Status: status })
+        });
+        const data = await res.json();
+        if (data.status !== 'success') throw new Error(data.message);
+        await loadStaffSupplyChain();
+        loadDashboardStats();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
 
     // Make the Reserve / Pending Reservation Orders card clickable to show reservations
     (function attachReserveCardClick() {

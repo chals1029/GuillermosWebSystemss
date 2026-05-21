@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../Config.php';
+require_once __DIR__ . '/SupplyChainService.php';
 
 class StaffController
 {
@@ -263,6 +264,20 @@ class StaffController
         );
         $revenue = $revenueResult ? $revenueResult->fetch_assoc()['revenue'] : 0;
 
+        $supplyAlerts = [
+            'low_stock_materials' => [],
+            'low_stock_products' => [],
+            'open_purchase_orders' => 0,
+            'pending_po_value' => 0.0,
+        ];
+        try {
+            if (SupplyChainService::baseTablesReady($this->conn)) {
+                $supplyAlerts = (new SupplyChainService($this->conn))->getStockAlerts();
+            }
+        } catch (\Throwable $e) {
+            // ignore alert failures for dashboard stats
+        }
+
         header('Content-Type: application/json');
         echo json_encode([
             'status' => 'success',
@@ -271,7 +286,8 @@ class StaffController
                 'completedToday' => (int)$completedToday,
                 'pendingReservations' => (int)$reserveCount,
                 'online' => (int)$onlineCount,
-                'revenue' => (float)$revenue
+                'revenue' => (float)$revenue,
+                'supply_alerts' => $supplyAlerts,
             ]
         ]);
     }
@@ -415,6 +431,10 @@ class StaffController
             $computedTotal = 0.0;
             $preparedItems = [];
 
+            $supplyService = SupplyChainService::baseTablesReady($this->conn)
+                ? new SupplyChainService($this->conn)
+                : null;
+
             foreach ($lineItems as $productId => $line) {
                 if (!isset($productData[$productId])) {
                     throw new \InvalidArgumentException('A selected product is no longer available.');
@@ -426,6 +446,18 @@ class StaffController
 
                 if ($availableStock < $requestedQty) {
                     throw new \InvalidArgumentException('Insufficient stock for ' . $productRow['Product_Name']);
+                }
+
+                if ($supplyService !== null) {
+                    $recipe = $supplyService->getRecipeForProduct($productId);
+                    foreach ($recipe as $recipeLine) {
+                        $needed = (float)$recipeLine['Quantity_Per_Serving'] * $requestedQty;
+                        if ((float)$recipeLine['Stock_Quantity'] < $needed) {
+                            throw new \InvalidArgumentException(
+                                'Insufficient material for ' . $productRow['Product_Name'] . ': ' . ($recipeLine['Item_Name'] ?? 'ingredient')
+                            );
+                        }
+                    }
                 }
 
                 $unitPrice = (float)$productRow['Price'];
@@ -818,6 +850,14 @@ class StaffController
         }
 
         $stmt->close();
+
+        if (SupplyChainService::baseTablesReady($this->conn)) {
+            try {
+                (new SupplyChainService($this->conn))->deductMaterialsForProduct($productId, (float)$quantity);
+            } catch (\Throwable $e) {
+                throw new \RuntimeException($e->getMessage());
+            }
+        }
 
         // Try to write to inventory_log if available (either Staff_ID or User_ID)
         $actorId = 0;
