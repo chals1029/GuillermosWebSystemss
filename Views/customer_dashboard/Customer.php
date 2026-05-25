@@ -153,6 +153,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     COALESCE(p.Product_Name, CONCAT('Product ', od.Product_ID)) AS name,
                     COALESCE(p.Price, od.Price, 0) AS price,
                     p.Image AS image,
+                    p.Stock_Quantity AS stock_quantity,
                     od.Quantity AS quantity,
                     CASE WHEN p.Product_ID IS NULL THEN 0 ELSE 1 END AS is_available
                 FROM order_detail od
@@ -187,6 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $addedCount = 0;
         $skippedNames = [];
+        $cappedNotices = [];
 
         foreach ($items as $item) {
             if (!(int)$item['is_available']) {
@@ -199,7 +201,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $productName = 'Product ' . (int)$item['product_id'];
             }
 
-            $quantity = max(1, (int)$item['quantity']);
+            $requested = max(1, (int)$item['quantity']);
+            $stockLimit = isset($item['stock_quantity']) ? (int)$item['stock_quantity'] : null;
             $price = (float)$item['price'];
             $productId = (int)$item['product_id'];
             $imageData = $item['image'];
@@ -218,8 +221,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            $_SESSION['cart'][$productName]['quantity'] += $quantity;
-            $addedCount += $quantity;
+            // Cap so we never let the cart exceed the producible quantity.
+            $current = (int)$_SESSION['cart'][$productName]['quantity'];
+            if ($stockLimit !== null && $stockLimit <= 0) {
+                $skippedNames[] = $productName . ' (out of stock)';
+                continue;
+            }
+            $allowed = $requested;
+            if ($stockLimit !== null) {
+                $headroom = max(0, $stockLimit - $current);
+                if ($headroom < $requested) {
+                    $allowed = $headroom;
+                    if ($allowed > 0) {
+                        $cappedNotices[] = $productName . " (only {$allowed} available)";
+                    } else {
+                        $skippedNames[] = $productName . ' (no stock available)';
+                        continue;
+                    }
+                }
+            }
+
+            $_SESSION['cart'][$productName]['quantity'] += $allowed;
+            $addedCount += $allowed;
         }
 
         if ($addedCount === 0) {
@@ -231,6 +254,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $responseMessage = 'Added ' . $addedCount . ' item(s) to your cart.';
+        if (!empty($cappedNotices)) {
+            $responseMessage .= ' Capped: ' . implode(', ', $cappedNotices) . '.';
+        }
         if (!empty($skippedNames)) {
             $responseMessage .= ' Skipped unavailable item(s): ' . implode(', ', $skippedNames) . '.';
         }
@@ -2675,6 +2701,31 @@ function renderCart() {
     const totalCheckoutEl = $('checkout-total');
     const feeEl = $('checkout-delivery-fee');
 
+    // Step 1: clamp every cart line against current data-stock from the grid.
+    // This catches the case where the page stock changed after items were
+    // added (other shoppers' orders, ingredient adjustments, manual recompute).
+    const cappedNotices = [];
+    for (const [name, item] of Object.entries(cart)) {
+        const cardEl = document.querySelector('#product-grid .product[data-name="' + name + '"]')
+            || Array.from(document.querySelectorAll('#product-grid .product')).find(el => el.querySelector('.product-name')?.textContent?.trim() === name);
+        if (!cardEl) continue;
+        const dataStock = cardEl.getAttribute('data-stock');
+        if (dataStock === null) continue;
+        const stockForItem = Number(dataStock);
+        if (!Number.isFinite(stockForItem)) continue;
+        if (stockForItem <= 0) {
+            cappedNotices.push(name + ' (out of stock)');
+            delete cart[name];
+        } else if (item.quantity > stockForItem) {
+            cappedNotices.push(name + ' (capped to ' + stockForItem + ')');
+            cart[name].quantity = stockForItem;
+        }
+    }
+    if (cappedNotices.length > 0) {
+        // One alert is enough; the user sees the corrected quantities below.
+        try { alert('Cart adjusted to current ingredient stock:\n• ' + cappedNotices.join('\n• ')); } catch (_) {}
+    }
+
     if (Object.keys(cart).length === 0) {
         container.innerHTML = '<p style="text-align:center;color:#888;padding:60px 0;font-size:1.1rem;">Your cart is empty.<br>Start adding your favorite items!</p>';
         if (totalEl) totalEl.textContent = '₱0.00';
@@ -2763,7 +2814,22 @@ function addToCart(productId, name, price, image) {
     fd.append('product', name);
 
     fetch(location.href, { method: 'POST', body: fd })
-        .then(() => {
+        .then(async (response) => {
+            let payload = null;
+            const ct = response.headers.get('content-type') || '';
+            if (ct.includes('application/json')) {
+                try { payload = await response.json(); } catch (_) { payload = null; }
+            }
+            if (!response.ok) {
+                if (payload && payload.message) alert(payload.message);
+                if (payload && typeof payload.stock === 'number') {
+                    const card = document.querySelector('.product[data-product-id="' + (productId || -1) + '"]')
+                              || Array.from(document.querySelectorAll('#product-grid .product')).find(el => el.getAttribute('data-name') === name);
+                    if (card) card.setAttribute('data-stock', String(payload.stock));
+                }
+                renderCart();
+                return;
+            }
             if (!cart[name]) {
                 cart[name] = { product_id: productId || null, price: price, quantity: 0, image: image, stock: stock };
             } else {
@@ -2771,6 +2837,11 @@ function addToCart(productId, name, price, image) {
                 if (typeof stock !== 'undefined' && stock !== null) cart[name].stock = stock;
             }
             cart[name].quantity++;
+            if (payload && typeof payload.stock === 'number') {
+                const card = document.querySelector('.product[data-product-id="' + (productId || -1) + '"]')
+                          || Array.from(document.querySelectorAll('#product-grid .product')).find(el => el.getAttribute('data-name') === name);
+                if (card) card.setAttribute('data-stock', String(payload.stock));
+            }
 
             updateBadge();
             renderCart();
@@ -2849,7 +2920,9 @@ document.addEventListener('click', e => {
 
     const action = btn.dataset.action;
     const product = btn.dataset.product;
-    // If trying to increase quantity, enforce stock limits
+
+    // Client-side fast-fail using the data-stock cached on the product card.
+    // The server is the authoritative gate; this is just a UX shortcut.
     if (action === 'increase') {
         const currentQty = cart[product] ? cart[product].quantity : 0;
         let stock = null;
@@ -2860,7 +2933,7 @@ document.addEventListener('click', e => {
             return;
         }
         if (stock !== null && (currentQty + 1) > stock) {
-            alert('You cannot add more than ' + stock + ' unit(s) of ' + product + ' to your cart.');
+            alert('Only ' + stock + ' of ' + product + ' available based on current ingredient stock.');
             return;
         }
     }
@@ -2870,15 +2943,51 @@ document.addEventListener('click', e => {
     fd.append('product', product);
 
     fetch(location.href, { method: 'POST', body: fd })
-        .then(() => {
-            if (action === 'increase') cart[product].quantity++;
-            else if (action === 'decrease') {
+        .then(async (response) => {
+            // Backwards-compatible parse: server may return JSON or plain count.
+            let payload = null;
+            const ct = response.headers.get('content-type') || '';
+            if (ct.includes('application/json')) {
+                try { payload = await response.json(); } catch (_) { payload = null; }
+            }
+            if (!response.ok) {
+                if (payload && payload.message) alert(payload.message);
+                // Server may have refused the increment (e.g. stock cap). Resync the
+                // local cart to whatever the server says we have and refresh the
+                // product card's data-stock so the +/- button gets disabled correctly.
+                if (payload && cart[product]) {
+                    if (typeof payload.item_quantity === 'number') {
+                        if (payload.item_quantity <= 0) delete cart[product];
+                        else cart[product].quantity = payload.item_quantity;
+                    }
+                    if (typeof payload.stock === 'number') {
+                        const card = Array.from(document.querySelectorAll('#product-grid .product')).find(el => (el.getAttribute('data-name') === product) || (el.querySelector('.product-name')?.textContent?.trim() === product));
+                        if (card) card.setAttribute('data-stock', String(payload.stock));
+                    }
+                }
+                updateBadge();
+                renderCart();
+                return;
+            }
+            // Apply the action locally
+            if (action === 'increase') {
+                cart[product].quantity++;
+            } else if (action === 'decrease') {
                 cart[product].quantity--;
                 if (cart[product].quantity <= 0) delete cart[product];
             } else if (action === 'remove') {
                 delete cart[product];
             }
+            // If the server reported the latest stock, refresh data-stock on the card
+            if (payload && typeof payload.stock === 'number') {
+                const card = Array.from(document.querySelectorAll('#product-grid .product')).find(el => (el.getAttribute('data-name') === product) || (el.querySelector('.product-name')?.textContent?.trim() === product));
+                if (card) card.setAttribute('data-stock', String(payload.stock));
+            }
             updateBadge();
+            renderCart();
+        })
+        .catch(() => {
+            // Network failure — leave local state untouched and re-render.
             renderCart();
         });
 });

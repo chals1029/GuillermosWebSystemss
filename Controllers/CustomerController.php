@@ -289,11 +289,15 @@ class CustomerController
     {
         $action = strtolower(trim($action));
         $productName = trim($productName);
+        $jsonResponse = static function (array $payload, int $code = 200): void {
+            if (ob_get_level() > 0) { ob_end_clean(); }
+            header('Content-Type: application/json');
+            http_response_code($code);
+            echo json_encode($payload);
+        };
 
         if ($productName === '') {
-            http_response_code(400);
-            header('Content-Type: text/plain');
-            echo '0';
+            $jsonResponse(['status' => 'error', 'message' => 'Product required.', 'cart_count' => 0], 400);
             return;
         }
 
@@ -304,9 +308,11 @@ class CustomerController
         if (!isset($_SESSION['cart'][$productName]) && $action === 'increase') {
             $product = $this->getProductByName($productName);
             if ($product === null) {
-                http_response_code(404);
-                header('Content-Type: text/plain');
-                echo (string)$this->countCartItems($_SESSION['cart']);
+                $jsonResponse([
+                    'status' => 'error',
+                    'message' => 'Product not found.',
+                    'cart_count' => $this->countCartItems($_SESSION['cart']),
+                ], 404);
                 return;
             }
 
@@ -314,18 +320,44 @@ class CustomerController
                 'price' => (float)$product['Price'],
                 'quantity' => 0,
                 'image' => $product['Image'] ?? null,
+                'product_id' => (int)($product['Product_ID'] ?? 0),
             ];
         }
 
         if (!isset($_SESSION['cart'][$productName])) {
-            header('Content-Type: text/plain');
-            echo (string)$this->countCartItems($_SESSION['cart']);
+            $jsonResponse([
+                'status' => 'success',
+                'cart_count' => $this->countCartItems($_SESSION['cart']),
+                'item_quantity' => 0,
+            ]);
             return;
+        }
+
+        // Resolve the current authoritative stock for this product.
+        $currentStock = null;
+        $product = $this->getProductByName($productName);
+        if ($product !== null && isset($product['Stock_Quantity'])) {
+            $currentStock = (int)$product['Stock_Quantity'];
         }
 
         switch ($action) {
             case 'increase':
-                $_SESSION['cart'][$productName]['quantity']++;
+                $next = $_SESSION['cart'][$productName]['quantity'] + 1;
+                // Cap against current product stock (which is itself derived
+                // from the recipe + ingredient pantry by recomputeProductStock).
+                if ($currentStock !== null && $next > $currentStock) {
+                    $jsonResponse([
+                        'status'        => 'error',
+                        'message'       => $currentStock <= 0
+                            ? "{$productName} is out of stock."
+                            : "Only {$currentStock} of {$productName} available based on current ingredient stock.",
+                        'cart_count'    => $this->countCartItems($_SESSION['cart']),
+                        'item_quantity' => (int)$_SESSION['cart'][$productName]['quantity'],
+                        'stock'         => $currentStock,
+                    ], 409);
+                    return;
+                }
+                $_SESSION['cart'][$productName]['quantity'] = $next;
                 break;
             case 'decrease':
                 $_SESSION['cart'][$productName]['quantity']--;
@@ -338,8 +370,14 @@ class CustomerController
                 break;
         }
 
-        header('Content-Type: text/plain');
-        echo (string)$this->countCartItems($_SESSION['cart']);
+        $jsonResponse([
+            'status'        => 'success',
+            'cart_count'    => $this->countCartItems($_SESSION['cart']),
+            'item_quantity' => isset($_SESSION['cart'][$productName])
+                ? (int)$_SESSION['cart'][$productName]['quantity']
+                : 0,
+            'stock'         => $currentStock,
+        ]);
         return;
     }
 
