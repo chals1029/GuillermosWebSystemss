@@ -132,10 +132,13 @@ class SupplyChainService
 
     /**
      * Validate and deduct materials for one product quantity sold.
+     * Each ingredient deducted gets one row in supply_item_log so the owner
+     * has a full audit trail per order.
      *
+     * @param int        $orderId  Optional Order_ID to attach to the log row.
      * @throws \RuntimeException when recipe exists but materials are insufficient
      */
-    public function deductMaterialsForProduct(int $productId, float $servings): void
+    public function deductMaterialsForProduct(int $productId, float $servings, ?int $orderId = null): void
     {
         if ($servings <= 0 || !self::recipeTableReady($this->conn)) {
             return;
@@ -165,11 +168,21 @@ class SupplyChainService
                 $stmt->bind_param('di', $needed, $itemId);
                 $stmt->execute();
                 $stmt->close();
+                $this->logMovement(
+                    $itemId,
+                    -$needed,
+                    'Sale',
+                    $productId,
+                    $orderId !== null ? 'Order' : null,
+                    $orderId,
+                    null,
+                    null
+                );
             }
         }
     }
 
-    public function restoreMaterialsForProduct(int $productId, float $servings): void
+    public function restoreMaterialsForProduct(int $productId, float $servings, ?int $orderId = null): void
     {
         if ($servings <= 0 || !self::recipeTableReady($this->conn)) {
             return;
@@ -186,8 +199,86 @@ class SupplyChainService
                 $stmt->bind_param('di', $restore, $itemId);
                 $stmt->execute();
                 $stmt->close();
+                $this->logMovement(
+                    $itemId,
+                    $restore,
+                    'Refund',
+                    $productId,
+                    $orderId !== null ? 'Order' : null,
+                    $orderId,
+                    null,
+                    null
+                );
             }
         }
+    }
+
+    /**
+     * Append-only audit row for any change to supply_item.Stock_Quantity.
+     * Silently no-ops if the log table doesn't exist (older deploys).
+     */
+    public function logMovement(
+        int $itemId,
+        float $delta,
+        string $actionType,
+        ?int $productId = null,
+        ?string $referenceType = null,
+        ?int $referenceId = null,
+        ?string $reason = null,
+        ?string $notes = null
+    ): void {
+        if (!self::historyTableReady($this->conn)) {
+            return;
+        }
+
+        // Read the new balance after the calling code has applied the delta.
+        $balance = 0.0;
+        $stmt = $this->conn->prepare('SELECT Stock_Quantity FROM supply_item WHERE Item_ID = ?');
+        if ($stmt) {
+            $stmt->bind_param('i', $itemId);
+            $stmt->execute();
+            $row = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+            $balance = (float)($row['Stock_Quantity'] ?? 0);
+        }
+
+        $userId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+        $userRole = isset($_SESSION['user_role']) ? (string)$_SESSION['user_role'] : null;
+        if ($userRole !== null && $userRole === '') {
+            $userRole = null;
+        }
+
+        $ins = $this->conn->prepare(
+            'INSERT INTO supply_item_log
+                (Item_ID, Product_ID, Action_Type, Quantity_Delta, Balance_After,
+                 Reference_Type, Reference_ID, Reason, Notes, User_ID, User_Role)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        );
+        if (!$ins) {
+            return;
+        }
+        $ins->bind_param(
+            'iisddsissis',
+            $itemId,
+            $productId,
+            $actionType,
+            $delta,
+            $balance,
+            $referenceType,
+            $referenceId,
+            $reason,
+            $notes,
+            $userId,
+            $userRole
+        );
+        $ins->execute();
+        $ins->close();
+    }
+
+    public static function historyTableReady(\mysqli $conn): bool
+    {
+        $result = $conn->query("SHOW TABLES LIKE 'supply_item_log'");
+        return $result instanceof \mysqli_result && $result->num_rows > 0;
     }
 
     /**

@@ -582,7 +582,7 @@ class CustomerController
                 }
 
                 if ($supplyService !== null) {
-                    $supplyService->deductMaterialsForProduct($productId, (float)$quantity);
+                    $supplyService->deductMaterialsForProduct($productId, (float)$quantity, (int)$orderId);
                 }
             }
 
@@ -962,7 +962,7 @@ class CustomerController
             if (SupplyChainService::baseTablesReady($this->conn)) {
                 $supplyService = new SupplyChainService($this->conn);
                 foreach ($items as $item) {
-                    $supplyService->restoreMaterialsForProduct((int)$item['Product_ID'], (float)$item['Quantity']);
+                    $supplyService->restoreMaterialsForProduct((int)$item['Product_ID'], (float)$item['Quantity'], (int)$orderId);
                 }
             }
 

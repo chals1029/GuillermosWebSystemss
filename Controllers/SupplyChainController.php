@@ -19,6 +19,9 @@ class SupplyChainController
         // Ingredients inventory: staff can browse and do quick stock counts.
         'supply-items',
         'supply-adjust-item-stock',
+        // History views — read-only, useful for staff context.
+        'supply-item-history',
+        'supply-order-ingredients',
     ];
 
     /** @var list<string> Public, token-authenticated actions — no session required. */
@@ -181,6 +184,21 @@ class SupplyChainController
                 $this->requirePost();
                 $this->saveRecipe($this->getRequestData());
                 $this->jsonResponse(['status' => 'success']);
+                break;
+            case 'supply-item-history':
+                $itemId = (int)($_GET['item_id'] ?? 0);
+                $limit  = (int)($_GET['limit'] ?? 50);
+                if ($itemId <= 0) {
+                    $this->jsonResponse(['status' => 'error', 'message' => 'Item ID required.'], 400);
+                }
+                $this->jsonResponse(['status' => 'success', 'data' => $this->getItemHistory($itemId, $limit)]);
+                break;
+            case 'supply-order-ingredients':
+                $orderId = (int)($_GET['order_id'] ?? 0);
+                if ($orderId <= 0) {
+                    $this->jsonResponse(['status' => 'error', 'message' => 'Order ID required.'], 400);
+                }
+                $this->jsonResponse(['status' => 'success', 'data' => $this->getOrderIngredients($orderId)]);
                 break;
             default:
                 $this->jsonResponse(['status' => 'error', 'message' => 'Unknown supply chain action.'], 400);
@@ -577,6 +595,17 @@ class SupplyChainController
         $stmt->execute();
         $stmt->close();
 
+        $this->service->logMovement(
+            $itemId,
+            $delta,
+            'Adjust',
+            null,
+            null,
+            null,
+            $reason,
+            $notes !== '' ? $notes : null
+        );
+
         $actor = (int)($_SESSION['user_id'] ?? 0);
         $role  = (string)($_SESSION['user_role'] ?? '');
         error_log(sprintf(
@@ -842,6 +871,16 @@ class SupplyChainController
                 $stmt->bind_param('di', $toReceive, $itemId);
                 $stmt->execute();
                 $stmt->close();
+                $this->service->logMovement(
+                    $itemId,
+                    $toReceive,
+                    'Receive',
+                    null,
+                    'PurchaseOrder',
+                    $poId,
+                    null,
+                    'Stock from PO line #' . $lineId
+                );
             }
 
             $lineStmt = $this->conn->prepare(
@@ -1550,5 +1589,75 @@ class SupplyChainController
                 'url'               => (string)$link['url'],
             ]
         );
+    }
+
+    // ---------------------------------------------------------------------
+    // History endpoints
+    // ---------------------------------------------------------------------
+
+    /**
+     * Recent stock movements for one ingredient.
+     * @return list<array<string,mixed>>
+     */
+    private function getItemHistory(int $itemId, int $limit = 50): array
+    {
+        if (!SupplyChainService::historyTableReady($this->conn)) {
+            return [];
+        }
+        $limit = max(1, min(200, $limit));
+        $stmt = $this->conn->prepare(
+            'SELECT sil.Log_ID, sil.Item_ID, sil.Product_ID, sil.Action_Type,
+                    sil.Quantity_Delta, sil.Balance_After,
+                    sil.Reference_Type, sil.Reference_ID, sil.Reason, sil.Notes,
+                    sil.User_ID, sil.User_Role, sil.Created_At,
+                    p.Product_Name, si.Unit
+             FROM supply_item_log sil
+             LEFT JOIN product p ON p.Product_ID = sil.Product_ID
+             LEFT JOIN supply_item si ON si.Item_ID = sil.Item_ID
+             WHERE sil.Item_ID = ?
+             ORDER BY sil.Created_At DESC, sil.Log_ID DESC
+             LIMIT ' . $limit
+        );
+        if (!$stmt) {
+            return [];
+        }
+        $stmt->bind_param('i', $itemId);
+        $stmt->execute();
+        $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC) ?: [];
+        $stmt->close();
+        return $rows;
+    }
+
+    /**
+     * Aggregate the ingredients consumed by one order. Useful for the order
+     * detail panel: shows exactly what went into making the order.
+     * @return list<array<string,mixed>>
+     */
+    private function getOrderIngredients(int $orderId): array
+    {
+        if (!SupplyChainService::historyTableReady($this->conn)) {
+            return [];
+        }
+        $stmt = $this->conn->prepare(
+            "SELECT si.Item_ID, si.Item_Name, si.Unit,
+                    SUM(CASE WHEN sil.Action_Type = 'Sale'   THEN -sil.Quantity_Delta ELSE 0 END) AS Consumed,
+                    SUM(CASE WHEN sil.Action_Type = 'Refund' THEN  sil.Quantity_Delta ELSE 0 END) AS Restored,
+                    GROUP_CONCAT(DISTINCT p.Product_Name SEPARATOR ', ') AS Products
+             FROM supply_item_log sil
+             INNER JOIN supply_item si ON si.Item_ID = sil.Item_ID
+             LEFT JOIN product p ON p.Product_ID = sil.Product_ID
+             WHERE sil.Reference_Type = 'Order' AND sil.Reference_ID = ?
+             GROUP BY si.Item_ID, si.Item_Name, si.Unit
+             HAVING ABS(Consumed) > 0 OR ABS(Restored) > 0
+             ORDER BY si.Item_Name ASC"
+        );
+        if (!$stmt) {
+            return [];
+        }
+        $stmt->bind_param('i', $orderId);
+        $stmt->execute();
+        $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC) ?: [];
+        $stmt->close();
+        return $rows;
     }
 }

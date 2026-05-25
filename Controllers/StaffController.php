@@ -506,7 +506,7 @@ class StaffController
 
             foreach ($preparedItems as $item) {
                 $this->insertOrderDetailRow($orderId, $item['product_id'], $item['quantity'], $item['unit_price'], $item['subtotal']);
-                $this->decrementProductStock($item['product_id'], $item['quantity']);
+                $this->decrementProductStock($item['product_id'], $item['quantity'], $orderId);
             }
 
             $this->conn->commit();
@@ -829,7 +829,7 @@ class StaffController
         $stmt->close();
     }
 
-    private function decrementProductStock(int $productId, int $quantity): void
+    private function decrementProductStock(int $productId, int $quantity, ?int $orderId = null): void
     {
         // Ensure product has Stock_Quantity column before attempting to adjust stock
         if (!$this->columnExists('product', 'Stock_Quantity')) {
@@ -853,7 +853,7 @@ class StaffController
 
         if (SupplyChainService::baseTablesReady($this->conn)) {
             try {
-                (new SupplyChainService($this->conn))->deductMaterialsForProduct($productId, (float)$quantity);
+                (new SupplyChainService($this->conn))->deductMaterialsForProduct($productId, (float)$quantity, $orderId);
             } catch (\Throwable $e) {
                 throw new \RuntimeException($e->getMessage());
             }
