@@ -6,10 +6,11 @@
 -- script refreshes the Quantity_Per_Serving without duplicating rows.
 -- =============================================================================
 
--- Helper: a small temp table storing Product_Name + Item_Name + Qty per serving.
--- We resolve IDs in one INSERT...SELECT instead of N round-trips.
-DROP TEMPORARY TABLE IF EXISTS _recipe_seed;
-CREATE TEMPORARY TABLE _recipe_seed (
+-- Helper: a small staging table storing Product_Name + Item_Name + Qty per serving.
+-- Using a regular (non-temporary) table because we reference it multiple times
+-- in the same SELECT (MySQL doesn't allow that for TEMPORARY tables).
+DROP TABLE IF EXISTS _recipe_seed;
+CREATE TABLE _recipe_seed (
   Product_Name VARCHAR(120) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   Item_Name    VARCHAR(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   Qty          DECIMAL(10,3) NOT NULL,
@@ -576,4 +577,4 @@ LEFT JOIN product p ON p.Product_Name = rs.Product_Name
 LEFT JOIN supply_item si ON si.Item_Name = rs.Item_Name
 WHERE p.Product_ID IS NULL OR si.Item_ID IS NULL;
 
-DROP TEMPORARY TABLE IF EXISTS _recipe_seed;
+DROP TABLE IF EXISTS _recipe_seed;
