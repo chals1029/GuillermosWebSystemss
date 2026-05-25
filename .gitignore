@@ -18,3 +18,6 @@ storage_rate_limits/
 u435394025_guillermos_db.sql
 u435394025_guillermos*.sql
 *.sql.bak
+
+# Local deploy artifacts (contain secrets)
+.deploy/SECRETS.local.json
