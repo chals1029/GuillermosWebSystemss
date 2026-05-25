@@ -13,3 +13,8 @@ google_token.json
 
 # Runtime security state
 storage_rate_limits/
+
+# Database dumps (contain private data)
+u435394025_guillermos_db.sql
+u435394025_guillermos*.sql
+*.sql.bak
