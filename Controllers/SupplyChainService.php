@@ -124,6 +124,11 @@ class SupplyChainService
             }
 
             $this->conn->commit();
+
+            // Recipe edited: producible servings can change (different ingredients
+            // or different qty per serving). Recompute this one product so the
+            // menu/Stock_Quantity reflects the new BOM immediately.
+            $this->recomputeProductStock($productId);
         } catch (\Throwable $e) {
             $this->conn->rollback();
             throw $e;
@@ -180,6 +185,13 @@ class SupplyChainService
                 );
             }
         }
+
+        // Cascade: every product whose recipe touches these ingredients now
+        // has a different "max producible servings" — refresh their cached
+        // product.Stock_Quantity so the customer/staff menus correctly gray
+        // out anything that ran out.
+        $itemIds = array_map(static fn($l) => (int)$l['Item_ID'], $recipe);
+        $this->recomputeProductsForIngredients($itemIds);
     }
 
     public function restoreMaterialsForProduct(int $productId, float $servings, ?int $orderId = null): void
@@ -211,6 +223,10 @@ class SupplyChainService
                 );
             }
         }
+
+        // Refunds bring stock back; cascade-refresh affected products.
+        $itemIds = array_map(static fn($l) => (int)$l['Item_ID'], $recipe);
+        $this->recomputeProductsForIngredients($itemIds);
     }
 
     /**
@@ -279,6 +295,131 @@ class SupplyChainService
     {
         $result = $conn->query("SHOW TABLES LIKE 'supply_item_log'");
         return $result instanceof \mysqli_result && $result->num_rows > 0;
+    }
+
+    /**
+     * Recompute product.Stock_Quantity + Low_Stock_Alert for every product
+     * whose recipe references any of the given ingredient IDs.
+     *
+     * @param list<int> $itemIds
+     */
+    public function recomputeProductsForIngredients(array $itemIds): void
+    {
+        if (!self::recipeTableReady($this->conn)) {
+            return;
+        }
+        $itemIds = array_values(array_unique(array_filter(array_map('intval', $itemIds))));
+        if ($itemIds === []) {
+            return;
+        }
+        $csv = implode(',', $itemIds);
+        $result = $this->conn->query(
+            "SELECT DISTINCT Product_ID FROM product_recipe WHERE Item_ID IN ($csv)"
+        );
+        if (!$result) {
+            return;
+        }
+        while ($row = $result->fetch_assoc()) {
+            $this->recomputeProductStock((int)$row['Product_ID']);
+        }
+    }
+
+    /**
+     * Compute the maximum number of servings a product can produce given
+     * current ingredient stock. Updates product.Stock_Quantity and
+     * Low_Stock_Alert in one shot. No-op for products without a recipe
+     * (they're hand-managed).
+     *
+     * Producible servings = floor( min over all recipe lines of
+     *                              ingredient.Stock_Quantity / qty_per_serving ).
+     *
+     * Threshold mapping (matches the existing computeStockAlert in Owner.php):
+     *   >= 20  Safe
+     *   >= 10  Low
+     *   >=  1  Critical
+     *      0   Out of Stock
+     */
+    public function recomputeProductStock(int $productId): ?int
+    {
+        if ($productId <= 0 || !self::recipeTableReady($this->conn)) {
+            return null;
+        }
+
+        $stmt = $this->conn->prepare(
+            'SELECT pr.Quantity_Per_Serving, si.Stock_Quantity
+             FROM product_recipe pr
+             INNER JOIN supply_item si ON si.Item_ID = pr.Item_ID
+             WHERE pr.Product_ID = ?'
+        );
+        if (!$stmt) {
+            return null;
+        }
+        $stmt->bind_param('i', $productId);
+        $stmt->execute();
+        $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC) ?: [];
+        $stmt->close();
+
+        if ($rows === []) {
+            // No recipe: skip. Manual stock management remains in effect.
+            return null;
+        }
+
+        $maxServings = PHP_INT_MAX;
+        foreach ($rows as $row) {
+            $perServing = (float)$row['Quantity_Per_Serving'];
+            $available  = (float)$row['Stock_Quantity'];
+            if ($perServing <= 0) {
+                continue;
+            }
+            $servings = (int)floor($available / $perServing);
+            if ($servings < $maxServings) {
+                $maxServings = $servings;
+            }
+        }
+        if ($maxServings === PHP_INT_MAX) {
+            $maxServings = 0;
+        }
+        $maxServings = max(0, $maxServings);
+
+        if ($maxServings >= 20)      { $alert = 'Safe'; }
+        elseif ($maxServings >= 10)  { $alert = 'Low'; }
+        elseif ($maxServings >= 1)   { $alert = 'Critical'; }
+        else                         { $alert = 'Out of Stock'; }
+
+        $upd = $this->conn->prepare(
+            'UPDATE product SET Stock_Quantity = ?, Low_Stock_Alert = ? WHERE Product_ID = ?'
+        );
+        if ($upd) {
+            $upd->bind_param('isi', $maxServings, $alert, $productId);
+            $upd->execute();
+            $upd->close();
+        }
+        return $maxServings;
+    }
+
+    /**
+     * One-shot bootstrap: recompute every product that has a recipe.
+     * Useful right after the catalog migration to bring product stock in
+     * line with what the ingredient pantry can actually produce.
+     *
+     * @return int Number of products updated.
+     */
+    public function recomputeAllProducts(): int
+    {
+        if (!self::recipeTableReady($this->conn)) {
+            return 0;
+        }
+        $result = $this->conn->query('SELECT DISTINCT Product_ID FROM product_recipe');
+        if (!$result) {
+            return 0;
+        }
+        $count = 0;
+        while ($row = $result->fetch_assoc()) {
+            if ($this->recomputeProductStock((int)$row['Product_ID']) !== null) {
+                $count++;
+            }
+        }
+        return $count;
     }
 
     /**

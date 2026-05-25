@@ -200,6 +200,18 @@ class SupplyChainController
                 }
                 $this->jsonResponse(['status' => 'success', 'data' => $this->getOrderIngredients($orderId)]);
                 break;
+            case 'supply-recompute-all':
+                $this->requirePost();
+                if (strtolower((string)($_SESSION['user_role'] ?? '')) !== 'owner') {
+                    $this->jsonResponse(['status' => 'error', 'message' => 'Owner only.'], 403);
+                }
+                $count = $this->service->recomputeAllProducts();
+                $this->jsonResponse([
+                    'status'  => 'success',
+                    'message' => "Recomputed {$count} product(s) from current ingredient stock.",
+                    'data'    => ['updated' => $count],
+                ]);
+                break;
             default:
                 $this->jsonResponse(['status' => 'error', 'message' => 'Unknown supply chain action.'], 400);
         }
@@ -606,6 +618,9 @@ class SupplyChainController
             $notes !== '' ? $notes : null
         );
 
+        // Cascade: a manual count change can flip a product into Low / Out of Stock.
+        $this->service->recomputeProductsForIngredients([$itemId]);
+
         $actor = (int)($_SESSION['user_id'] ?? 0);
         $role  = (string)($_SESSION['user_role'] ?? '');
         error_log(sprintf(
@@ -854,6 +869,7 @@ class SupplyChainController
             "SELECT Line_ID, Item_ID, Quantity_Ordered, Quantity_Received FROM purchase_order_line WHERE PO_ID = " . (int)$poId
         );
 
+        $touchedItems = [];
         foreach ($lines as $line) {
             $lineId = (int)$line['Line_ID'];
             $itemId = (int)$line['Item_ID'];
@@ -881,6 +897,7 @@ class SupplyChainController
                     null,
                     'Stock from PO line #' . $lineId
                 );
+                $touchedItems[] = $itemId;
             }
 
             $lineStmt = $this->conn->prepare(
@@ -891,6 +908,10 @@ class SupplyChainController
                 $lineStmt->execute();
                 $lineStmt->close();
             }
+        }
+
+        if ($touchedItems !== []) {
+            $this->service->recomputeProductsForIngredients($touchedItems);
         }
     }
 
