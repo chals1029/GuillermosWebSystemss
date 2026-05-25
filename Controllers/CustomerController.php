@@ -1113,7 +1113,7 @@ class CustomerController
             position: relative;
         }
         .receipt-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #6B4F3F 0%, #8B6F5F 100%);
             color: white;
             padding: 30px;
             text-align: center;
@@ -1160,7 +1160,7 @@ class CustomerController
             background: #f8f9fa;
             border-radius: 12px;
             padding: 20px;
-            border-left: 4px solid #667eea;
+            border-left: 4px solid #6B4F3F;
             transition: transform 0.2s, box-shadow 0.2s;
         }
         .info-card:hover {
@@ -1232,7 +1232,7 @@ class CustomerController
             box-shadow: 0 4px 6px rgba(0,0,0,0.05);
         }
         .items-table th {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #6B4F3F 0%, #8B6F5F 100%);
             color: white;
             padding: 15px;
             text-align: left;
@@ -1333,7 +1333,7 @@ class CustomerController
             font-size: 0.9rem;
         }
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #6B4F3F 0%, #8B6F5F 100%);
             color: white;
         }
         .btn-primary:hover {

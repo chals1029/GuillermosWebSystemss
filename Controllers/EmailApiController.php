@@ -241,7 +241,7 @@ class EmailApiController
 
                 /* Header */
                 .header {
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    background: linear-gradient(135deg, #6B4F3F 0%, #8B6F5F 100%);
                     color: white;
                     padding: 40px 30px;
                     text-align: center;
@@ -377,7 +377,7 @@ class EmailApiController
                     background: #f8f9fa;
                     border-radius: 12px;
                     padding: 20px;
-                    border-left: 4px solid #667eea;
+                    border-left: 4px solid #6B4F3F;
                 }
 
                 .info-card h3 {
@@ -429,7 +429,7 @@ class EmailApiController
                 }
 
                 .items-table th {
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    background: linear-gradient(135deg, #6B4F3F 0%, #8B6F5F 100%);
                     color: white;
                     padding: 15px;
                     text-align: left;
@@ -512,7 +512,7 @@ class EmailApiController
                 .cta-button {
                     display: inline-block;
                     padding: 12px 24px;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    background: linear-gradient(135deg, #6B4F3F 0%, #8B6F5F 100%);
                     color: white;
                     text-decoration: none;
                     border-radius: 8px;

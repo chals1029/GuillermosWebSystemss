@@ -1252,7 +1252,7 @@ $productPerformance = $ownerController->getProductPerformance();
       <!-- Projection Summary Cards -->
       <div class="row g-4 mb-4">
         <div class="col-md-3">
-          <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+          <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #6B4F3F 0%, #8B6F5F 100%);">
             <div class="card-body text-white">
               <h6 class="text-white-50 mb-2">Current Month</h6>
               <h3 class="fw-bold mb-0" id="currentMonthRevenue">₱0.00</h3>
