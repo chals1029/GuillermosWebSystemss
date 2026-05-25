@@ -10,11 +10,11 @@
 -- We resolve IDs in one INSERT...SELECT instead of N round-trips.
 DROP TEMPORARY TABLE IF EXISTS _recipe_seed;
 CREATE TEMPORARY TABLE _recipe_seed (
-  Product_Name VARCHAR(120) NOT NULL,
-  Item_Name    VARCHAR(150) NOT NULL,
+  Product_Name VARCHAR(120) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  Item_Name    VARCHAR(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   Qty          DECIMAL(10,3) NOT NULL,
-  Notes        VARCHAR(255) NULL
-) ENGINE=InnoDB;
+  Notes        VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 INSERT INTO _recipe_seed (Product_Name, Item_Name, Qty, Notes) VALUES
 -- ============= PASTA (8 oz portion = ~100g pasta dry) =============
