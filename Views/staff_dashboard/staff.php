@@ -900,7 +900,7 @@ if (isset($_SESSION['user_id'])) {
             <i class="bi bi-calendar-check"></i> <span>Advance Reservation</span>
           </button>
           <button class="menu-panel-btn" id="nav-inventory" onclick="document.getElementById('menuPanel').classList.remove('show'); showContent('inventory')">
-            <i class="bi bi-archive"></i> <span>Products</span>
+            <i class="bi bi-archive"></i> <span>Inventory</span>
           </button>
           <button class="menu-panel-btn" id="nav-supply-chain" onclick="document.getElementById('menuPanel').classList.remove('show'); showContent('supply-chain')">
             <i class="bi bi-truck"></i> <span>Receive Stock (PO)</span>
@@ -1192,6 +1192,49 @@ if (isset($_SESSION['user_id'])) {
       </div>
     </div>
 
+    <!-- Staff ingredient adjust modal -->
+    <div class="modal fade" id="staffIngrAdjustModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="staffIngrAdjustTitle">Adjust Stock</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="staffIngrAdjustId">
+            <div class="alert alert-light border mb-3">
+              <div class="small text-muted">Current stock</div>
+              <div class="h4 mb-0" style="color:#4d2e00;" id="staffIngrAdjustCurrent">— —</div>
+            </div>
+            <div class="row g-3">
+              <div class="col-md-7">
+                <label class="form-label fw-semibold">Set new count to</label>
+                <input type="number" step="0.01" min="0" class="form-control form-control-lg" id="staffIngrAdjustNewQty">
+                <div class="form-text">We'll save the difference. Use this for shift counts.</div>
+              </div>
+              <div class="col-md-5">
+                <label class="form-label fw-semibold">Reason</label>
+                <select class="form-select form-select-lg" id="staffIngrAdjustReason">
+                  <option value="recount">Recount / shift count</option>
+                  <option value="spoilage">Spoilage</option>
+                  <option value="damage">Damage / spillage</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="col-12">
+                <label class="form-label fw-semibold">Notes <span class="text-muted fw-normal">(optional)</span></label>
+                <input type="text" class="form-control" id="staffIngrAdjustNotes" maxlength="255" placeholder="e.g. spilled during morning rush">
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" id="staffIngrAdjustSubmit" style="background:#4d2e00;border:none;">Save adjustment</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="process-bulk-section" style="display:none;">
       <h4 class="mb-4">Process Bulk Orders</h4>
       
@@ -1305,12 +1348,28 @@ if (isset($_SESSION['user_id'])) {
       <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
           <h4 class="mb-1" style="color:#4d2e00;">📦 Inventory Management</h4>
-          <p class="text-muted mb-0" style="font-size:0.9rem;">View and monitor product stock levels</p>
+          <p class="text-muted mb-0" style="font-size:0.9rem;">Products and ingredients stock at a glance</p>
         </div>
         <div class="d-flex gap-2 align-items-center">
           <i class="bi bi-box-seam fs-4" style="color:#b57b46;"></i>
         </div>
       </div>
+
+      <ul class="nav nav-tabs mb-3" id="staffInvTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" id="staff-inv-tab-products" data-bs-toggle="tab" data-bs-target="#staff-inv-pane-products" type="button">
+            <i class="bi bi-box-seam me-1"></i> Product Inventory
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="staff-inv-tab-ingredients" data-bs-toggle="tab" data-bs-target="#staff-inv-pane-ingredients" type="button">
+            <i class="bi bi-egg-fried me-1"></i> Ingredients Inventory
+          </button>
+        </li>
+      </ul>
+
+      <div class="tab-content">
+        <div class="tab-pane fade show active" id="staff-inv-pane-products">
 
       <!-- Stock Summary Cards -->
       <div class="row g-3 mb-4">
@@ -1458,7 +1517,67 @@ if (isset($_SESSION['user_id'])) {
         <h5 class="mt-3 text-muted">No products found</h5>
         <p class="text-muted">Try adjusting your filters or search criteria</p>
       </div>
-    </div>
+        </div><!-- /#staff-inv-pane-products -->
+
+        <!-- ============= INGREDIENTS SUB-TAB ============= -->
+        <div class="tab-pane fade" id="staff-inv-pane-ingredients">
+          <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+            <p class="text-muted mb-0">Browse on-hand stock and record shift counts. Low-stock items show in red.</p>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+              <select id="staffIngrCategory" class="form-select form-select-sm" style="min-width:160px;">
+                <option value="">All categories</option>
+              </select>
+              <input id="staffIngrSearch" type="search" class="form-control form-control-sm" placeholder="Search ingredient..." style="min-width:200px;">
+              <button class="btn btn-sm btn-outline-secondary" id="staffIngrRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3" id="staffIngrSummary">
+            <div class="col-md-3 col-6">
+              <div class="card p-3 text-center" style="background:#fbf3e3;border:0;">
+                <div class="small text-muted">Tracked ingredients</div>
+                <div class="h4 mb-0" style="color:#4d2e00;" id="staffIngrCountTotal">—</div>
+              </div>
+            </div>
+            <div class="col-md-3 col-6">
+              <div class="card p-3 text-center" style="background:#fdecec;border:0;">
+                <div class="small text-muted">Low stock</div>
+                <div class="h4 mb-0 text-danger" id="staffIngrCountLow">—</div>
+              </div>
+            </div>
+            <div class="col-md-3 col-6">
+              <div class="card p-3 text-center" style="background:#eef9f0;border:0;">
+                <div class="small text-muted">Healthy</div>
+                <div class="h4 mb-0 text-success" id="staffIngrCountOk">—</div>
+              </div>
+            </div>
+            <div class="col-md-3 col-6">
+              <div class="card p-3 text-center" style="background:#fff;border:1px solid #f1e8da;">
+                <div class="small text-muted">Categories</div>
+                <div class="h4 mb-0" style="color:#4d2e00;" id="staffIngrCountCats">—</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-hover align-middle" id="staffIngrTable">
+              <thead style="background:#f8f9fa;">
+                <tr>
+                  <th>Ingredient</th>
+                  <th>Category</th>
+                  <th>Stock</th>
+                  <th>Reorder</th>
+                  <th>Supplier</th>
+                  <th>Status</th>
+                  <th style="width:130px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody><tr><td colspan="7" class="text-center text-muted py-4">Loading ingredients...</td></tr></tbody>
+            </table>
+          </div>
+        </div><!-- /#staff-inv-pane-ingredients -->
+      </div><!-- /.tab-content -->
+    </div><!-- /#inventory-section -->
 
   <!-- STAFF PROFILE OVERLAY (like customer) -->
   <div id="staff-profile-overlay" class="overlay" style="display:none;z-index:99999;">
@@ -1657,6 +1776,11 @@ if (isset($_SESSION['user_id'])) {
       } catch (e) {}
       if (section === 'supply-chain' && typeof loadStaffSupplyChain === 'function') {
         loadStaffSupplyChain();
+      }
+      if (section === 'inventory' && typeof loadStaffIngredients === 'function') {
+        // Inventory now has Products + Ingredients sub-tabs. Lazy-load
+        // ingredients in the background so switching to that tab is instant.
+        loadStaffIngredients();
       }
     }
     /* ---------- Live Clock ( Welcome Back, Owner) ---------- */
@@ -2106,6 +2230,169 @@ if (isset($_SESSION['user_id'])) {
         loadDashboardStats();
       } catch (err) {
         alert(err.message);
+      }
+    });
+
+    /* =====================================================================
+     * Staff: Ingredients Inventory
+     *  - GET  ?action=supply-items                  → list ingredients
+     *  - POST ?action=supply-adjust-item-stock      → save count delta
+     * ===================================================================== */
+    const staffIngrState = { items: [], filter: { search: '', category: '' } };
+    const staffIngrEsc = (v) => String(v ?? '').replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    async function loadStaffIngredients() {
+      const tbody = document.querySelector('#staffIngrTable tbody');
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Loading ingredients...</td></tr>';
+      try {
+        const res = await fetch('?action=supply-items', { cache: 'no-store' });
+        const data = await res.json();
+        if (data.status !== 'success') throw new Error(data.message || 'Failed to load.');
+        staffIngrState.items = data.data || [];
+        renderStaffIngrCategoryOptions();
+        renderStaffIngrTable();
+        renderStaffIngrSummary();
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">${staffIngrEsc(err.message)}</td></tr>`;
+      }
+    }
+
+    function renderStaffIngrCategoryOptions() {
+      const sel = document.getElementById('staffIngrCategory');
+      if (!sel) return;
+      const previous = sel.value;
+      const cats = Array.from(new Set(staffIngrState.items.map(i => i.Category).filter(Boolean))).sort();
+      sel.innerHTML = '<option value="">All categories</option>'
+        + cats.map(c => `<option value="${staffIngrEsc(c)}">${staffIngrEsc(c)}</option>`).join('');
+      if (previous && cats.includes(previous)) sel.value = previous;
+    }
+
+    function applyStaffIngrFilter(items) {
+      const { search, category } = staffIngrState.filter;
+      const q = search.trim().toLowerCase();
+      return items.filter(i => {
+        if (category && i.Category !== category) return false;
+        if (q) {
+          const hay = `${i.Item_Name || ''} ${i.Category || ''} ${i.Supplier_Name || ''}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+    }
+
+    function renderStaffIngrTable() {
+      const tbody = document.querySelector('#staffIngrTable tbody');
+      if (!tbody) return;
+      const filtered = applyStaffIngrFilter(staffIngrState.items);
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No ingredients match your filter.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = filtered.map(i => {
+        const isLow = i.Stock_Alert === 'Low';
+        const stockBadge = isLow ? 'text-danger fw-semibold' : '';
+        const alertBadge = isLow
+          ? '<span class="badge bg-danger">Low</span>'
+          : '<span class="badge bg-success">OK</span>';
+        const inactive = (i.Status || 'Active') !== 'Active'
+          ? ' <span class="badge bg-secondary ms-1">Inactive</span>' : '';
+        return `
+          <tr>
+            <td>
+              <strong>${staffIngrEsc(i.Item_Name)}</strong>${inactive}
+              <small class="text-muted d-block">Unit: ${staffIngrEsc(i.Unit)}</small>
+            </td>
+            <td>${staffIngrEsc(i.Category)}</td>
+            <td class="${stockBadge}">${Number(i.Stock_Quantity).toFixed(2)} ${staffIngrEsc(i.Unit)}</td>
+            <td>${Number(i.Reorder_Level).toFixed(2)}</td>
+            <td>${staffIngrEsc(i.Supplier_Name || '—')}</td>
+            <td>${alertBadge}</td>
+            <td>
+              <button type="button" class="btn btn-sm btn-outline-primary staff-ingr-adjust" data-id="${i.Item_ID}">
+                <i class="bi bi-clipboard-data"></i> Adjust
+              </button>
+            </td>
+          </tr>`;
+      }).join('');
+    }
+
+    function renderStaffIngrSummary() {
+      const items = staffIngrState.items;
+      const low = items.filter(i => i.Stock_Alert === 'Low').length;
+      const cats = new Set(items.map(i => i.Category).filter(Boolean)).size;
+      document.getElementById('staffIngrCountTotal').textContent = items.length;
+      document.getElementById('staffIngrCountLow').textContent = low;
+      document.getElementById('staffIngrCountOk').textContent = items.length - low;
+      document.getElementById('staffIngrCountCats').textContent = cats;
+    }
+
+    document.getElementById('staffIngrSearch')?.addEventListener('input', (e) => {
+      staffIngrState.filter.search = e.target.value || '';
+      renderStaffIngrTable();
+    });
+    document.getElementById('staffIngrCategory')?.addEventListener('change', (e) => {
+      staffIngrState.filter.category = e.target.value || '';
+      renderStaffIngrTable();
+    });
+    document.getElementById('staffIngrRefresh')?.addEventListener('click', loadStaffIngredients);
+
+    // Refresh on tab show as well, so a long-lived dashboard re-fetches
+    // current stock when staff returns to the Ingredients view.
+    document.getElementById('staff-inv-tab-ingredients')?.addEventListener('shown.bs.tab', loadStaffIngredients);
+
+    const staffIngrAdjustModal = document.getElementById('staffIngrAdjustModal')
+      ? bootstrap.Modal.getOrCreateInstance(document.getElementById('staffIngrAdjustModal'))
+      : null;
+
+    document.getElementById('staff-inv-pane-ingredients')?.addEventListener('click', (e) => {
+      const adjustBtn = e.target.closest('.staff-ingr-adjust');
+      if (!adjustBtn) return;
+      const item = staffIngrState.items.find(x => String(x.Item_ID) === adjustBtn.dataset.id);
+      if (!item) return;
+      document.getElementById('staffIngrAdjustId').value = item.Item_ID;
+      document.getElementById('staffIngrAdjustTitle').textContent = 'Adjust stock — ' + item.Item_Name;
+      document.getElementById('staffIngrAdjustCurrent').textContent =
+        Number(item.Stock_Quantity).toFixed(2) + ' ' + (item.Unit || '');
+      document.getElementById('staffIngrAdjustNewQty').value = Number(item.Stock_Quantity).toFixed(2);
+      document.getElementById('staffIngrAdjustReason').value = 'recount';
+      document.getElementById('staffIngrAdjustNotes').value = '';
+      staffIngrAdjustModal?.show();
+    });
+
+    document.getElementById('staffIngrAdjustSubmit')?.addEventListener('click', async () => {
+      const itemId = parseInt(document.getElementById('staffIngrAdjustId').value || '0', 10);
+      const item = staffIngrState.items.find(x => x.Item_ID == itemId);
+      if (!item) return;
+      const newQty = parseFloat(document.getElementById('staffIngrAdjustNewQty').value || '0');
+      if (isNaN(newQty) || newQty < 0) { alert('Enter a valid count.'); return; }
+      const delta = +(newQty - Number(item.Stock_Quantity)).toFixed(3);
+      if (delta === 0) { alert('No change. Adjust the count first.'); return; }
+      const btn = document.getElementById('staffIngrAdjustSubmit');
+      btn.disabled = true;
+      const original = btn.textContent;
+      btn.textContent = 'Saving...';
+      try {
+        const res = await fetch('?action=supply-adjust-item-stock', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            Item_ID: itemId,
+            Delta: delta,
+            Reason: document.getElementById('staffIngrAdjustReason').value,
+            Notes: document.getElementById('staffIngrAdjustNotes').value.trim()
+          })
+        });
+        const data = await res.json();
+        if (data.status !== 'success') throw new Error(data.message || 'Save failed.');
+        staffIngrAdjustModal?.hide();
+        await loadStaffIngredients();
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = original;
       }
     });
 

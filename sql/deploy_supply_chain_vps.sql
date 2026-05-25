@@ -1,8 +1,10 @@
 -- VPS: import these files IN ORDER via phpMyAdmin (select your production database first)
--- 1. supply_chain_migration.sql      (tables: supplier, supply_item, purchase_order, ...)
--- 2. supply_chain_phase2_migration.sql (table: product_recipe)
--- 3. seed_suppliers.sql              (optional demo suppliers)
--- 4. seed_supply_items.sql           (optional demo materials; run after seeds suppliers)
+-- 1. supply_chain_migration.sql              (tables: supplier, supply_item, purchase_order, ...)
+-- 2. supply_chain_phase2_migration.sql       (table: product_recipe)
+-- 3. supply_chain_phase3_supplier_link.sql   (PO_Token + Confirmed/Shipped statuses)
+-- 4. supply_chain_phase4_issues.sql          (supply_issue: refunds / replacements)
+-- 5. seed_suppliers.sql                      (optional demo suppliers)
+-- 6. seed_supply_items.sql                   (optional demo materials; run after seeds suppliers)
 --
 -- CLI example (adjust user/host/db):
 -- mysql -u USER -p DATABASE < supply_chain_migration.sql

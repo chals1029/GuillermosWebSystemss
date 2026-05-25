@@ -1112,7 +1112,7 @@ $productPerformance = $ownerController->getProductPerformance();
                   (₱<?= number_format((float)($supplyAlerts['pending_po_value'] ?? 0), 2) ?> pending).</p>
               <?php endif; ?>
               <?php if (count($lowMaterials) > 0): ?>
-                <p class="mb-1 fw-semibold">Low materials:</p>
+                <p class="mb-1 fw-semibold">Low ingredients:</p>
                 <ul class="small mb-2">
                   <?php foreach ($lowMaterials as $m): ?>
                     <li><?= htmlspecialchars((string)($m['Item_Name'] ?? '')) ?> —
@@ -1210,6 +1210,7 @@ $productPerformance = $ownerController->getProductPerformance();
           <small class="text-muted">View and edit staff accounts</small>
         </div>
         <div>
+          <button id="changeMyPasswordBtn" class="btn btn-outline-primary me-2"><i class="bi bi-key"></i> Change My Password</button>
           <button id="refreshStaffBtn" class="btn btn-quick">Refresh</button>
         </div>
       </div>
@@ -1549,53 +1550,94 @@ $productPerformance = $ownerController->getProductPerformance();
     </div>
     <!-- ==================== INVENTORY ==================== -->
     <div class="page" id="inventory">
-      <h3 class="mb-4" style="display:none;">
-      <h4 class="mb-4">Inventory</h4>
-      <div class="inventory-header">
-        <select id="category-filter" class="filter-select">
-          <option value="">All Categories</option>
-          <option value="Pasta">Pasta</option>
-          <option value="Rice Meals">Rice Meals</option>
-          <option value="Coffee Beverages">Coffee Beverages</option>
-          <option value="NonCoffee">Non-Coffee</option>
-          <option value="Pizza">Pizza</option>
-          <option value="Cakes">Cakes</option>
-          <option value="Sandwiches & Salad">Sandwiches & Salad</option>
-          <option value="Lemon Series">Lemon Series</option>
-          <option value="Breads">Breads</option>
-          <option value="Pie-Cookies-Bar">Pie-Cookies-Bar</option>
-          <option value="Milktea">Milktea</option>
-          <option value="Fruits & Yogurt">Fruits & Yogurt</option>
-        </select>
-        <button class="add-product-btn" data-bs-toggle="modal" data-bs-target="#productModal">
-          Add Product
-        </button>
-      </div>      
-      <!-- Wrapper div for horizontal scrolling on mobile -->
-      <div class="table-responsive">
-      <div class="inventory-table">
-        <table id="inventory-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Image</th>
-              <th>Product Name</th>
-              <th>Category</th>
-              <th>Price</th>
-              <th>Stock</th>
-              <th>Low Stock Alert</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <h4 class="mb-3">Inventory</h4>
+
+      <ul class="nav nav-tabs mb-3" id="inventoryTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" id="inv-tab-products" data-bs-toggle="tab" data-bs-target="#inv-pane-products" type="button">
+            <i class="bi bi-box-seam me-1"></i> Product Inventory
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="inv-tab-ingredients" data-bs-toggle="tab" data-bs-target="#inv-pane-ingredients" type="button">
+            <i class="bi bi-egg-fried me-1"></i> Ingredients Inventory
+          </button>
+        </li>
+      </ul>
+
+      <div class="tab-content">
+        <div class="tab-pane fade show active" id="inv-pane-products">
+          <div class="inventory-header">
+            <select id="category-filter" class="filter-select">
+              <option value="">All Categories</option>
+              <option value="Pasta">Pasta</option>
+              <option value="Rice Meals">Rice Meals</option>
+              <option value="Coffee Beverages">Coffee Beverages</option>
+              <option value="NonCoffee">Non-Coffee</option>
+              <option value="Pizza">Pizza</option>
+              <option value="Cakes">Cakes</option>
+              <option value="Sandwiches & Salad">Sandwiches & Salad</option>
+              <option value="Lemon Series">Lemon Series</option>
+              <option value="Breads">Breads</option>
+              <option value="Pie-Cookies-Bar">Pie-Cookies-Bar</option>
+              <option value="Milktea">Milktea</option>
+              <option value="Fruits & Yogurt">Fruits & Yogurt</option>
+            </select>
+            <button class="add-product-btn" data-bs-toggle="modal" data-bs-target="#productModal">
+              Add Product
+            </button>
+          </div>
+          <div class="table-responsive">
+            <div class="inventory-table">
+              <table id="inventory-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Image</th>
+                    <th>Product Name</th>
+                    <th>Category</th>
+                    <th>Price</th>
+                    <th>Stock</th>
+                    <th>Low Stock Alert</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-pane fade" id="inv-pane-ingredients">
+          <div class="inventory-header">
+            <span class="text-muted">Ingredients used in recipes (raw goods, dairy, dry goods, packaging)</span>
+            <button type="button" class="add-product-btn" id="invIngrAddBtn">Add Ingredient</button>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle" id="invIngrTable">
+              <thead style="background:#f8f9fa;">
+                <tr>
+                  <th>Ingredient</th>
+                  <th>Category</th>
+                  <th>Stock</th>
+                  <th>Reorder</th>
+                  <th>Unit Cost</th>
+                  <th>Supplier</th>
+                  <th>Alert</th>
+                  <th style="width:200px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody><tr><td colspan="8" class="text-center text-muted py-4">Loading ingredients...</td></tr></tbody>
+            </table>
+          </div>
+          <p class="text-muted small mt-2 mb-0">Manage suppliers and purchase orders for these ingredients in the <a href="#" id="invIngrGoSupplyChain">Supply Chain</a> page.</p>
+        </div>
       </div>
     </div>
     <!-- ==================== SUPPLY CHAIN ==================== -->
     <div class="page" id="supply-chain">
       <h4 class="mb-2" style="color:#4d2e00;font-weight:700;">Supply Chain</h4>
-      <p class="text-muted mb-4">Manage suppliers, raw materials, and purchase orders for café operations.</p>
+      <p class="text-muted mb-4">Manage suppliers, ingredients, and purchase orders for café operations.</p>
 
       <div class="row g-3 mb-4" id="supplySummaryCards">
         <div class="col-6 col-md">
@@ -1645,7 +1687,7 @@ $productPerformance = $ownerController->getProductPerformance();
           <button class="nav-link active" id="sc-tab-suppliers" data-bs-toggle="tab" data-bs-target="#sc-pane-suppliers" type="button">Suppliers</button>
         </li>
         <li class="nav-item" role="presentation">
-          <button class="nav-link" id="sc-tab-items" data-bs-toggle="tab" data-bs-target="#sc-pane-items" type="button">Materials</button>
+          <button class="nav-link" id="sc-tab-items" data-bs-toggle="tab" data-bs-target="#sc-pane-items" type="button">Ingredients</button>
         </li>
         <li class="nav-item" role="presentation">
           <button class="nav-link" id="sc-tab-pos" data-bs-toggle="tab" data-bs-target="#sc-pane-pos" type="button">Purchase Orders</button>
@@ -1679,31 +1721,31 @@ $productPerformance = $ownerController->getProductPerformance();
 
         <div class="tab-pane fade" id="sc-pane-items">
           <div class="inventory-header">
-            <span class="text-muted">Ingredients and supplies (not menu products)</span>
-            <button type="button" class="add-product-btn" id="scAddItemBtn">Add Material</button>
+            <span class="text-muted">Ingredients used in recipes (raw goods, dairy, dry goods, packaging)</span>
+            <button type="button" class="add-product-btn" id="scAddItemBtn">Add Ingredient</button>
           </div>
           <div class="table-responsive">
             <table class="table table-hover align-middle" id="scItemsTable">
               <thead style="background:#f8f9fa;">
                 <tr>
-                  <th>Item</th>
+                  <th>Ingredient</th>
                   <th>Category</th>
                   <th>Stock</th>
                   <th>Reorder</th>
                   <th>Unit Cost</th>
                   <th>Supplier</th>
                   <th>Alert</th>
-                  <th style="width:120px;">Actions</th>
+                  <th style="width:160px;">Actions</th>
                 </tr>
               </thead>
-              <tbody><tr><td colspan="8" class="text-center text-muted py-4">Loading materials...</td></tr></tbody>
+              <tbody><tr><td colspan="8" class="text-center text-muted py-4">Loading ingredients...</td></tr></tbody>
             </table>
           </div>
         </div>
 
         <div class="tab-pane fade" id="sc-pane-recipes">
           <div class="inventory-header">
-            <span class="text-muted">Link menu products to materials used per serving</span>
+            <span class="text-muted">Link menu products to ingredients used per serving</span>
           </div>
           <div class="row g-3 mb-3">
             <div class="col-md-6">
@@ -1716,12 +1758,12 @@ $productPerformance = $ownerController->getProductPerformance();
           </div>
           <div id="scRecipeLines"></div>
           <button type="button" class="btn btn-primary mt-3" id="scSaveRecipeBtn" style="background:#4d2e00;border:none;">Save Recipe</button>
-          <p class="text-muted small mt-2 mb-0">When customers or staff sell a product with a recipe, material stock is checked and deducted automatically.</p>
+          <p class="text-muted small mt-2 mb-0">When customers or staff sell a product with a recipe, ingredient stock is checked and deducted automatically.</p>
         </div>
 
         <div class="tab-pane fade" id="sc-pane-pos">
           <div class="inventory-header">
-            <span class="text-muted">Orders to restock materials</span>
+            <span class="text-muted">Orders to restock ingredients</span>
             <button type="button" class="add-product-btn" id="scAddPoBtn">New Purchase Order</button>
           </div>
           <div class="table-responsive">
@@ -1824,7 +1866,7 @@ $productPerformance = $ownerController->getProductPerformance();
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="scItemModalTitle">Add Material</h5>
+          <h5 class="modal-title" id="scItemModalTitle">Add Ingredient</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
@@ -1859,6 +1901,50 @@ $productPerformance = $ownerController->getProductPerformance();
     </div>
   </div>
 
+  <!-- ============= INGREDIENT QUICK STOCK ADJUSTMENT MODAL ============= -->
+  <div class="modal fade" id="scAdjustModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="scAdjustTitle">Adjust Stock</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="scAdjustItemId">
+          <div class="alert alert-light border mb-3">
+            <div class="small text-muted">Current stock</div>
+            <div class="h4 mb-0" style="color:#4d2e00;" id="scAdjustCurrent">— —</div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-7">
+              <label class="form-label fw-semibold">Set new count to</label>
+              <input type="number" step="0.01" min="0" class="form-control form-control-lg" id="scAdjustNewQty">
+              <div class="form-text">We'll save the difference. Use this for shift counts.</div>
+            </div>
+            <div class="col-md-5">
+              <label class="form-label fw-semibold">Reason</label>
+              <select class="form-select form-select-lg" id="scAdjustReason">
+                <option value="recount">Recount / shift count</option>
+                <option value="spoilage">Spoilage</option>
+                <option value="damage">Damage / spillage</option>
+                <option value="received">Manual receive</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Notes <span class="text-muted fw-normal">(optional)</span></label>
+              <input type="text" class="form-control" id="scAdjustNotes" maxlength="255" placeholder="e.g. spilled during morning rush">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="scAdjustSubmit" style="background:#4d2e00;border:none;">Save adjustment</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal fade" id="scPoModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
@@ -1868,17 +1954,13 @@ $productPerformance = $ownerController->getProductPerformance();
         </div>
         <div class="modal-body">
           <div class="row g-2 mb-3">
-            <div class="col-md-6">
+            <div class="col-md-8">
               <label class="form-label">Supplier *</label>
               <select class="form-select" id="scPoSupplier" required></select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-4">
               <label class="form-label">Order Date</label>
               <input type="date" class="form-control" id="scPoOrderDate">
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Expected Delivery</label>
-              <input type="date" class="form-control" id="scPoExpected">
             </div>
           </div>
           <div class="mb-3">
@@ -1887,7 +1969,10 @@ $productPerformance = $ownerController->getProductPerformance();
           </div>
           <h6>Line Items</h6>
           <div id="scPoLines"></div>
-          <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="scAddPoLineBtn"><i class="bi bi-plus"></i> Add line</button>
+          <div class="d-flex justify-content-between align-items-center mt-2 border-top pt-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="scAddPoLineBtn"><i class="bi bi-plus"></i> Add line</button>
+            <div class="fw-bold" style="color: #4d2e00;">Grand Total: <span id="scPoGrandTotal">₱0.00</span></div>
+          </div>
           <p class="text-muted small mt-2 mb-0">Marking as received on create will add stock immediately.</p>
         </div>
         <div class="modal-footer">
@@ -1908,6 +1993,60 @@ $productPerformance = $ownerController->getProductPerformance();
         </div>
         <div class="modal-body" id="scPoDetailBody"></div>
         <div class="modal-footer" id="scPoDetailFooter"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============= REPORT MATERIAL ISSUE MODAL (refund / replacement) ============= -->
+  <div class="modal fade" id="scIssueModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Report a Material Problem</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="scIssuePoId">
+          <p class="text-muted small">File a problem against the materials received from this supplier. They will be notified by email with the secure link.</p>
+          <div class="mb-3">
+            <label class="form-label">Item (optional)</label>
+            <select class="form-select" id="scIssueLine">
+              <option value="">— Whole order —</option>
+            </select>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Issue type</label>
+              <select class="form-select" id="scIssueType">
+                <option value="Damaged">Damaged</option>
+                <option value="Wrong_Quantity">Wrong quantity</option>
+                <option value="Expired">Expired / spoiled</option>
+                <option value="Wrong_Item">Wrong item</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Action requested</label>
+              <select class="form-select" id="scIssueAction">
+                <option value="Replacement">Replacement</option>
+                <option value="Refund">Refund</option>
+                <option value="Credit_Note">Credit note</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Quantity affected</label>
+              <input type="number" min="0" step="0.01" class="form-control" id="scIssueQty" value="0">
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="form-label">Notes for supplier</label>
+            <textarea class="form-control" id="scIssueNotes" rows="3" maxlength="1000" placeholder="Describe what went wrong..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="scIssueSubmit" style="background:#4d2e00;border:none;">File &amp; notify supplier</button>
+        </div>
       </div>
     </div>
   </div>
@@ -3128,7 +3267,7 @@ $productPerformance = $ownerController->getProductPerformance();
         html += `<p class="mb-2"><strong>${openPos}</strong> purchase order(s) awaiting receipt (₱${pending} pending).</p>`;
       }
       if (materials.length) {
-        html += '<p class="mb-1 fw-semibold">Low materials:</p><ul class="small mb-2">';
+        html += '<p class="mb-1 fw-semibold">Low ingredients:</p><ul class="small mb-2">';
         materials.forEach(m => {
           html += `<li>${m.Item_Name} — ${Number(m.Stock_Quantity).toFixed(2)} ${m.Unit || ''} (reorder ${Number(m.Reorder_Level).toFixed(2)})</li>`;
         });
@@ -4412,6 +4551,16 @@ $productPerformance = $ownerController->getProductPerformance();
       document.getElementById('editEmail').value = email;
       document.getElementById('editPhone').value = phone;
       document.getElementById('editUserRole').value = 'Staff';
+      // Always clear the password field on open — never persist a stale value.
+      const editPwd = document.getElementById('editPassword');
+      if (editPwd) {
+        editPwd.value = '';
+        editPwd.type = 'password';
+        const toggleIcon = document.querySelector('#toggleEditPassword i');
+        if (toggleIcon) toggleIcon.className = 'bi bi-eye';
+        const rules = document.getElementById('editPasswordRules');
+        if (rules) rules.style.display = 'none';
+      }
       bootstrap.Modal.getOrCreateInstance(document.getElementById('editStaffModal')).show();
       return;
     }
@@ -4419,6 +4568,137 @@ $productPerformance = $ownerController->getProductPerformance();
 
   // Open Add Staff modal from Manage Staff page
   document.getElementById('openStaffModalBtn')?.addEventListener('click', () => bootstrap.Modal.getOrCreateInstance(document.getElementById('staffModal')).show());
+
+  // ---- Change My Password (admin self-service) ----
+  document.getElementById('changeMyPasswordBtn')?.addEventListener('click', () => {
+    ['myPwCurrent', 'myPwNew', 'myPwConfirm'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) { el.value = ''; el.type = 'password'; }
+    });
+    document.querySelectorAll('#myPasswordModal [data-toggle-pw] i').forEach(i => { i.className = 'bi bi-eye'; });
+    document.getElementById('myPwRules').style.display = 'none';
+    document.getElementById('myPwMatch').textContent = '';
+    const alertBox = document.getElementById('myPwAlert');
+    alertBox.classList.add('d-none');
+    alertBox.textContent = '';
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('myPasswordModal')).show();
+  });
+
+  // Show/hide for any input with data-toggle-pw="<inputId>"
+  document.querySelectorAll('#myPasswordModal [data-toggle-pw]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.dataset.togglePw);
+      if (!target) return;
+      const icon = btn.querySelector('i');
+      if (target.type === 'password') {
+        target.type = 'text';
+        if (icon) icon.className = 'bi bi-eye-slash';
+      } else {
+        target.type = 'password';
+        if (icon) icon.className = 'bi bi-eye';
+      }
+    });
+  });
+
+  // Live policy hints + match indicator
+  const myPwNewInput = document.getElementById('myPwNew');
+  const myPwConfirmInput = document.getElementById('myPwConfirm');
+  function refreshMyPwRules() {
+    const pw = myPwNewInput.value || '';
+    const rules = document.getElementById('myPwRules');
+    rules.style.display = pw === '' ? 'none' : 'block';
+    const checks = {
+      '.rule-min':     pw.length >= 8,
+      '.rule-upper':   /[A-Z]/.test(pw),
+      '.rule-lower':   /[a-z]/.test(pw),
+      '.rule-num':     /\d/.test(pw),
+      '.rule-special': /[^A-Za-z0-9]/.test(pw),
+    };
+    Object.entries(checks).forEach(([sel, ok]) => {
+      const span = rules.querySelector(sel);
+      if (!span) return;
+      span.className = (sel.replace('.', '') + ' ' + (ok ? 'text-success' : 'text-danger'));
+      const ic = span.querySelector('i');
+      if (ic) ic.className = ok ? 'bi bi-check-circle' : 'bi bi-x-circle';
+    });
+    refreshMyPwMatch();
+  }
+  function refreshMyPwMatch() {
+    const a = myPwNewInput.value || '';
+    const b = myPwConfirmInput.value || '';
+    const out = document.getElementById('myPwMatch');
+    if (b === '') { out.textContent = ''; return; }
+    if (a === b) { out.textContent = '✓ Passwords match'; out.className = 'form-text text-success'; }
+    else         { out.textContent = '✗ Passwords do not match'; out.className = 'form-text text-danger'; }
+  }
+  myPwNewInput?.addEventListener('input', refreshMyPwRules);
+  myPwConfirmInput?.addEventListener('input', refreshMyPwMatch);
+
+  // Submit
+  document.getElementById('myPwSubmitBtn')?.addEventListener('click', async function () {
+    const btn = this;
+    const alertBox = document.getElementById('myPwAlert');
+    alertBox.classList.add('d-none');
+    alertBox.textContent = '';
+
+    const current = (document.getElementById('myPwCurrent').value || '');
+    const next    = (document.getElementById('myPwNew').value || '');
+    const confirm = (document.getElementById('myPwConfirm').value || '');
+
+    if (!current || !next || !confirm) {
+      alertBox.className = 'alert alert-warning'; alertBox.textContent = 'All fields are required.'; alertBox.classList.remove('d-none');
+      return;
+    }
+    if (next !== confirm) {
+      alertBox.className = 'alert alert-warning'; alertBox.textContent = 'New passwords do not match.'; alertBox.classList.remove('d-none');
+      return;
+    }
+    const failures = [];
+    if (next.length < 8)              failures.push('be at least 8 characters');
+    if (!/[A-Z]/.test(next))          failures.push('include an uppercase letter');
+    if (!/[a-z]/.test(next))          failures.push('include a lowercase letter');
+    if (!/\d/.test(next))             failures.push('include a number');
+    if (!/[^A-Za-z0-9]/.test(next))   failures.push('include a special character');
+    if (failures.length) {
+      alertBox.className = 'alert alert-warning';
+      alertBox.textContent = 'New password must ' + failures.join(', ') + '.';
+      alertBox.classList.remove('d-none');
+      return;
+    }
+
+    btn.disabled = true;
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Updating...';
+
+    try {
+      const fd = new FormData();
+      fd.append('action', 'change_my_password');
+      fd.append('current_password', current);
+      fd.append('new_password', next);
+      fd.append('confirm_password', confirm);
+      const res = await fetch('?action=change_my_password', { method: 'POST', body: fd });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json || json.status !== 'success') {
+        alertBox.className = 'alert alert-danger';
+        alertBox.textContent = json?.message || ('Failed (HTTP ' + res.status + ').');
+        alertBox.classList.remove('d-none');
+      } else {
+        bootstrap.Modal.getInstance(document.getElementById('myPasswordModal'))?.hide();
+        if (typeof showSuccessMessage === 'function') {
+          showSuccessMessage(json.message || 'Password changed successfully.');
+        } else {
+          alert(json.message || 'Password changed.');
+        }
+      }
+    } catch (err) {
+      alertBox.className = 'alert alert-danger';
+      alertBox.textContent = 'Network error. Please try again.';
+      alertBox.classList.remove('d-none');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+  });
 
   // Load staff list on initial manage-staff page render if active
   if (document.querySelector('.sidebar .nav-link[data-page="manage-staff"]')?.classList.contains('active')) {
@@ -4491,8 +4771,35 @@ $productPerformance = $ownerController->getProductPerformance();
                 <div class="col-md-6"><label class="form-label">Phone Number</label><input type="text" class="form-control" name="Phonenumber" id="editPhone" placeholder="09xxxxxxxxx" readonly></div>
                 <div class="col-md-6"><label class="form-label">Role</label><input type="text" class="form-control" name="User_Role" id="editUserRole" value="Staff" readonly></div>
               </div>
+
+              <hr class="my-4">
+              <h6 class="fw-bold mb-2" style="color:#4d2e00;">Reset Password</h6>
+              <p class="text-muted small mb-3">
+                <i class="bi bi-shield-lock"></i> For security, the existing password cannot be displayed (it's stored as a one-way hash).
+                Enter a new password below to overwrite it, or leave blank to keep the current one.
+              </p>
+              <div class="row g-3">
+                <div class="col-md-12">
+                  <label class="form-label">New Password</label>
+                  <div class="input-group">
+                    <input type="password" class="form-control" name="Password" id="editPassword"
+                           autocomplete="new-password" placeholder="Leave blank to keep current password">
+                    <button class="btn btn-outline-secondary" type="button" id="toggleEditPassword" tabindex="-1" aria-label="Show or hide password">
+                      <i class="bi bi-eye"></i>
+                    </button>
+                  </div>
+                  <div class="form-text">Min 8 chars, include upper + lower case, a number, and a special character.</div>
+                  <ul class="list-unstyled small mt-2 mb-0" id="editPasswordRules" style="display:none;">
+                    <li><span class="rule-min text-danger"><i class="bi bi-x-circle"></i></span> At least 8 characters</li>
+                    <li><span class="rule-upper text-danger"><i class="bi bi-x-circle"></i></span> Contains uppercase letter</li>
+                    <li><span class="rule-lower text-danger"><i class="bi bi-x-circle"></i></span> Contains lowercase letter</li>
+                    <li><span class="rule-num text-danger"><i class="bi bi-x-circle"></i></span> Contains a number</li>
+                    <li><span class="rule-special text-danger"><i class="bi bi-x-circle"></i></span> Contains a special character</li>
+                  </ul>
+                </div>
+              </div>
               <div class="mt-3">
-                <small class="text-muted"><i class="bi bi-info-circle"></i> Note: Email, phone number, and password cannot be changed here. Contact the administrator for these changes.</small>
+                <small class="text-muted"><i class="bi bi-info-circle"></i> Email and phone number cannot be changed here. Contact the administrator for those changes.</small>
               </div>
             </form>
           </div>
@@ -4504,6 +4811,59 @@ $productPerformance = $ownerController->getProductPerformance();
         </div>
       </div>
      </div>
+
+    <!-- ============= CHANGE MY PASSWORD MODAL (admin self-service) ============= -->
+    <div class="modal fade" id="myPasswordModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content" style="border-radius:16px;">
+          <div class="modal-header border-0">
+            <h5 class="modal-title fw-bold"><i class="bi bi-key"></i> Change My Password</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <p class="text-muted small mb-3">
+              Enter your current password to confirm it's you, then choose a new password.
+            </p>
+            <form id="myPasswordForm" autocomplete="off">
+              <div class="mb-3">
+                <label class="form-label">Current password</label>
+                <div class="input-group">
+                  <input type="password" class="form-control" id="myPwCurrent" name="current_password" autocomplete="current-password" required>
+                  <button class="btn btn-outline-secondary" type="button" data-toggle-pw="myPwCurrent" tabindex="-1"><i class="bi bi-eye"></i></button>
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">New password</label>
+                <div class="input-group">
+                  <input type="password" class="form-control" id="myPwNew" name="new_password" autocomplete="new-password" required>
+                  <button class="btn btn-outline-secondary" type="button" data-toggle-pw="myPwNew" tabindex="-1"><i class="bi bi-eye"></i></button>
+                </div>
+                <ul class="list-unstyled small mt-2 mb-0" id="myPwRules" style="display:none;">
+                  <li><span class="rule-min text-danger"><i class="bi bi-x-circle"></i></span> At least 8 characters</li>
+                  <li><span class="rule-upper text-danger"><i class="bi bi-x-circle"></i></span> Contains uppercase letter</li>
+                  <li><span class="rule-lower text-danger"><i class="bi bi-x-circle"></i></span> Contains lowercase letter</li>
+                  <li><span class="rule-num text-danger"><i class="bi bi-x-circle"></i></span> Contains a number</li>
+                  <li><span class="rule-special text-danger"><i class="bi bi-x-circle"></i></span> Contains a special character</li>
+                </ul>
+              </div>
+              <div class="mb-1">
+                <label class="form-label">Confirm new password</label>
+                <div class="input-group">
+                  <input type="password" class="form-control" id="myPwConfirm" name="confirm_password" autocomplete="new-password" required>
+                  <button class="btn btn-outline-secondary" type="button" data-toggle-pw="myPwConfirm" tabindex="-1"><i class="bi bi-eye"></i></button>
+                </div>
+                <div class="form-text" id="myPwMatch"></div>
+              </div>
+              <div id="myPwAlert" class="alert d-none mt-3" role="alert"></div>
+            </form>
+          </div>
+          <div class="modal-footer border-0">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary fw-bold" id="myPwSubmitBtn" style="background:#4d2e00;border:none;">Update password</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <script>
     {
   // Edit Staff Modal - Delete button handler
@@ -4554,6 +4914,47 @@ $productPerformance = $ownerController->getProductPerformance();
 
   // Edit Staff Modal - Save changes button handler
   const saveEditStaffBtn = document.getElementById('saveEditStaffBtn');
+
+  // Edit Staff Modal - password show/hide + live policy hints
+  const toggleEditPasswordBtn = document.getElementById('toggleEditPassword');
+  if (toggleEditPasswordBtn) {
+    toggleEditPasswordBtn.addEventListener('click', () => {
+      const input = document.getElementById('editPassword');
+      const icon = toggleEditPasswordBtn.querySelector('i');
+      if (!input) return;
+      if (input.type === 'password') {
+        input.type = 'text';
+        if (icon) icon.className = 'bi bi-eye-slash';
+      } else {
+        input.type = 'password';
+        if (icon) icon.className = 'bi bi-eye';
+      }
+    });
+  }
+  const editPwdInput = document.getElementById('editPassword');
+  if (editPwdInput) {
+    editPwdInput.addEventListener('input', () => {
+      const pw = editPwdInput.value;
+      const rules = document.getElementById('editPasswordRules');
+      if (!rules) return;
+      rules.style.display = pw === '' ? 'none' : 'block';
+      const checks = {
+        '.rule-min':     pw.length >= 8,
+        '.rule-upper':   /[A-Z]/.test(pw),
+        '.rule-lower':   /[a-z]/.test(pw),
+        '.rule-num':     /\d/.test(pw),
+        '.rule-special': /[^A-Za-z0-9]/.test(pw),
+      };
+      Object.entries(checks).forEach(([sel, ok]) => {
+        const span = rules.querySelector(sel);
+        if (!span) return;
+        span.className = (sel.replace('.', '') + ' ' + (ok ? 'text-success' : 'text-danger'));
+        const ic = span.querySelector('i');
+        if (ic) ic.className = ok ? 'bi bi-check-circle' : 'bi bi-x-circle';
+      });
+    });
+  }
+
   if (saveEditStaffBtn) {
     saveEditStaffBtn.addEventListener('click', async function() {
       const saveBtn = this;
@@ -4562,9 +4963,24 @@ $productPerformance = $ownerController->getProductPerformance();
       const username = (document.getElementById('editUsername').value || '').trim();
       const email = (document.getElementById('editEmail').value || '').trim();
       const phone = (document.getElementById('editPhone').value || '').trim();
+      const password = (document.getElementById('editPassword').value || '');
       if (!name || !username) { alert('Name and username are required'); return; }
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Invalid email address'); return; }
       if (phone && phone !== '' && !/^\d{11}$/.test(phone)) { alert('Phone must be 11 digits'); return; }
+      // If a new password was typed, validate it before sending — fail fast
+      // with friendly messaging instead of waiting for a server round-trip.
+      if (password !== '') {
+        const failures = [];
+        if (password.length < 8)       failures.push('be at least 8 characters');
+        if (!/[A-Z]/.test(password))   failures.push('include an uppercase letter');
+        if (!/[a-z]/.test(password))   failures.push('include a lowercase letter');
+        if (!/\d/.test(password))      failures.push('include a number');
+        if (!/[^A-Za-z0-9]/.test(password)) failures.push('include a special character');
+        if (failures.length) {
+          alert('New password must ' + failures.join(', ') + '.');
+          return;
+        }
+      }
       
       // Disable button and show loading state
       saveBtn.disabled = true;
@@ -4579,6 +4995,7 @@ $productPerformance = $ownerController->getProductPerformance();
         fd.append('Username', username);
         fd.append('Email', email);
         fd.append('Phonenumber', phone);
+        if (password !== '') fd.append('Password', password);
         const resp = await fetch('?action=update_staff', { method: 'POST', body: fd });
         const res = await resp.json().catch(() => null);
         if (!resp.ok || !res || res.status !== 'success') { 
@@ -4814,13 +5231,8 @@ $productPerformance = $ownerController->getProductPerformance();
   }
 
   function renderItems() {
-    const tbody = document.querySelector('#scItemsTable tbody');
-    if (!tbody) return;
-    if (!scState.items.length) {
-      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No materials yet.</td></tr>';
-      return;
-    }
-    tbody.innerHTML = scState.items.map(i => `
+    const empty = '<tr><td colspan="8" class="text-center text-muted py-4">No ingredients yet. Click "Add Ingredient" to get started.</td></tr>';
+    const html = !scState.items.length ? empty : scState.items.map(i => `
       <tr>
         <td><strong>${esc(i.Item_Name)}</strong> <small class="text-muted">(${esc(i.Unit)})</small></td>
         <td>${esc(i.Category)}</td>
@@ -4829,11 +5241,16 @@ $productPerformance = $ownerController->getProductPerformance();
         <td>₱${Number(i.Unit_Cost).toFixed(2)}</td>
         <td>${esc(i.Supplier_Name || '—')}</td>
         <td><span class="badge ${i.Stock_Alert === 'Low' ? 'bg-danger' : 'bg-success'}">${esc(i.Stock_Alert)}</span></td>
-        <td>
+        <td class="d-flex flex-wrap gap-1">
+          <button type="button" class="btn btn-sm btn-outline-primary sc-adjust-item" data-id="${i.Item_ID}" title="Quick stock count / adjustment"><i class="bi bi-clipboard-data"></i> Adjust</button>
           <button type="button" class="btn btn-sm btn-outline-secondary sc-edit-item" data-id="${i.Item_ID}">Edit</button>
           <button type="button" class="btn btn-sm btn-outline-danger sc-del-item" data-id="${i.Item_ID}">Delete</button>
         </td>
       </tr>`).join('');
+    // Render into both the Supply Chain tab and the Inventory page mirror.
+    document.querySelectorAll('#scItemsTable tbody, #invIngrTable tbody').forEach(tb => {
+      tb.innerHTML = html;
+    });
   }
 
   function renderPos() {
@@ -4843,12 +5260,27 @@ $productPerformance = $ownerController->getProductPerformance();
       tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No purchase orders yet.</td></tr>';
       return;
     }
+    const statusBadge = (s) => {
+      const map = {
+        Draft: 'bg-secondary', Ordered: 'bg-info text-dark',
+        Confirmed: 'bg-success', Shipped: 'bg-primary',
+        Partial: 'bg-warning text-dark', Received: 'bg-success',
+        Cancelled: 'bg-danger'
+      };
+      return `<span class="badge ${map[s] || 'bg-secondary'}">${esc(s)}</span>`;
+    };
     tbody.innerHTML = scState.pos.map(po => {
       const actions = [];
-      if (['Draft', 'Ordered', 'Partial'].includes(po.Status)) {
+      if (['Draft', 'Ordered', 'Confirmed', 'Shipped', 'Partial'].includes(po.Status)) {
         if (po.Status === 'Draft') actions.push(`<button type="button" class="btn btn-sm btn-outline-primary sc-po-status" data-id="${po.PO_ID}" data-status="Ordered">Mark Ordered</button>`);
         actions.push(`<button type="button" class="btn btn-sm btn-success sc-po-status" data-id="${po.PO_ID}" data-status="Received">Receive</button>`);
         actions.push(`<button type="button" class="btn btn-sm btn-outline-danger sc-po-status" data-id="${po.PO_ID}" data-status="Cancelled">Cancel</button>`);
+      }
+      if (['Draft', 'Ordered', 'Confirmed', 'Shipped', 'Partial'].includes(po.Status)) {
+        actions.push(`<button type="button" class="btn btn-sm btn-outline-info sc-po-link" data-id="${po.PO_ID}" title="Copy supplier confirmation link"><i class="bi bi-link-45deg"></i> Share</button>`);
+      }
+      if (po.Status === 'Received' || po.Status === 'Partial') {
+        actions.push(`<button type="button" class="btn btn-sm btn-outline-warning sc-po-issue" data-id="${po.PO_ID}" title="Report damaged / wrong / missing items"><i class="bi bi-exclamation-triangle"></i> Report problem</button>`);
       }
       actions.push(`<button type="button" class="btn btn-sm btn-link sc-po-view" data-id="${po.PO_ID}">View</button>`);
       return `<tr>
@@ -4858,7 +5290,7 @@ $productPerformance = $ownerController->getProductPerformance();
         <td>${esc(po.Expected_Delivery || '—')}</td>
         <td>${po.Line_Count}</td>
         <td>₱${Number(po.Total_Amount).toFixed(2)}</td>
-        <td><span class="badge bg-secondary">${esc(po.Status)}</span></td>
+        <td>${statusBadge(po.Status)}</td>
         <td class="d-flex flex-wrap gap-1">${actions.join('')}</td>
       </tr>`;
     }).join('');
@@ -4913,7 +5345,7 @@ $productPerformance = $ownerController->getProductPerformance();
     const row = document.createElement('div');
     row.className = 'row g-2 align-items-end mb-2 sc-recipe-line';
     row.innerHTML = `
-      <div class="col-md-7"><select class="form-select sc-recipe-item" required><option value="">Material</option>${itemOpts}</select></div>
+      <div class="col-md-7"><select class="form-select sc-recipe-item" required><option value="">Ingredient</option>${itemOpts}</select></div>
       <div class="col-md-4"><input type="number" class="form-control sc-recipe-qty" min="0.001" step="0.001" placeholder="Qty per serving" value="${line ? line.Quantity_Per_Serving : '1'}" required></div>
       <div class="col-md-1"><button type="button" class="btn btn-sm btn-outline-danger sc-recipe-remove">&times;</button></div>`;
     row.querySelector('.sc-recipe-remove')?.addEventListener('click', () => row.remove());
@@ -4981,7 +5413,7 @@ $productPerformance = $ownerController->getProductPerformance();
 
   function openItemForm(item) {
     fillSupplierSelects();
-    document.getElementById('scItemModalTitle').textContent = item ? 'Edit Material' : 'Add Material';
+    document.getElementById('scItemModalTitle').textContent = item ? 'Edit Ingredient' : 'Add Ingredient';
     document.getElementById('scItemId').value = item ? item.Item_ID : '';
     document.getElementById('scItemName').value = item?.Item_Name || '';
     document.getElementById('scItemCategory').value = item?.Category || 'General';
@@ -4995,6 +5427,29 @@ $productPerformance = $ownerController->getProductPerformance();
     itemModal?.show();
   }
 
+  function updatePoGrandTotal() {
+    let grandTotal = 0;
+    document.querySelectorAll('.sc-po-line').forEach(row => {
+      const qtyInput = row.querySelector('.sc-po-line-qty');
+      const costInput = row.querySelector('.sc-po-line-cost');
+      const subtotalEl = row.querySelector('.sc-po-line-subtotal');
+      
+      const qty = parseFloat(qtyInput?.value || '0');
+      const cost = parseFloat(costInput?.value || '0');
+      const subtotal = qty * cost;
+      grandTotal += subtotal;
+
+      if (subtotalEl) {
+        subtotalEl.textContent = 'Subtotal: ₱' + subtotal.toFixed(2);
+      }
+    });
+
+    const grandTotalEl = document.getElementById('scPoGrandTotal');
+    if (grandTotalEl) {
+      grandTotalEl.textContent = '₱' + grandTotal.toFixed(2);
+    }
+  }
+
   function buildPoLineRow() {
     const itemOpts = scState.items
       .filter(i => (i.Status || '') === 'Active')
@@ -5003,28 +5458,41 @@ $productPerformance = $ownerController->getProductPerformance();
     const row = document.createElement('div');
     row.className = 'row g-2 align-items-end mb-2 sc-po-line';
     row.innerHTML = `
-      <div class="col-md-5"><select class="form-select sc-po-line-item" required><option value="">Material</option>${itemOpts}</select></div>
-      <div class="col-md-3"><input type="number" class="form-control sc-po-line-qty" min="0.01" step="0.01" placeholder="Qty" required></div>
-      <div class="col-md-3"><input type="number" class="form-control sc-po-line-cost" min="0" step="0.01" placeholder="Unit cost" required></div>
+      <div class="col-md-4"><select class="form-select sc-po-line-item" required><option value="">Ingredient</option>${itemOpts}</select></div>
+      <div class="col-md-2"><input type="number" class="form-control sc-po-line-qty" min="0.01" step="any" placeholder="Qty" value="1" required></div>
+      <div class="col-md-2"><input type="number" class="form-control sc-po-line-cost" min="0" step="any" placeholder="Unit cost" value="0" required></div>
+      <div class="col-md-3 text-end text-muted pb-2 sc-po-line-subtotal">Subtotal: ₱0.00</div>
       <div class="col-md-1"><button type="button" class="btn btn-sm btn-outline-danger sc-po-line-remove">&times;</button></div>`;
     row.querySelector('.sc-po-line-item')?.addEventListener('change', function () {
       const cost = this.selectedOptions[0]?.dataset?.cost;
-      if (cost) row.querySelector('.sc-po-line-cost').value = cost;
+      if (cost) {
+        row.querySelector('.sc-po-line-cost').value = cost;
+      } else {
+        row.querySelector('.sc-po-line-cost').value = 0;
+      }
+      updatePoGrandTotal();
     });
-    row.querySelector('.sc-po-line-remove')?.addEventListener('click', () => row.remove());
+    row.querySelector('.sc-po-line-qty')?.addEventListener('input', updatePoGrandTotal);
+    row.querySelector('.sc-po-line-cost')?.addEventListener('input', updatePoGrandTotal);
+    row.querySelector('.sc-po-line-qty')?.addEventListener('change', updatePoGrandTotal);
+    row.querySelector('.sc-po-line-cost')?.addEventListener('change', updatePoGrandTotal);
+    row.querySelector('.sc-po-line-remove')?.addEventListener('click', () => {
+      row.remove();
+      updatePoGrandTotal();
+    });
     return row;
   }
 
   function openPoForm() {
     fillSupplierSelects();
     document.getElementById('scPoOrderDate').value = new Date().toISOString().slice(0, 10);
-    document.getElementById('scPoExpected').value = '';
     document.getElementById('scPoNotes').value = '';
     const lines = document.getElementById('scPoLines');
     if (lines) {
       lines.innerHTML = '';
       lines.appendChild(buildPoLineRow());
     }
+    updatePoGrandTotal();
     poModal?.show();
   }
 
@@ -5044,7 +5512,6 @@ $productPerformance = $ownerController->getProductPerformance();
       json: {
         Supplier_ID: parseInt(supplierId, 10),
         Order_Date: document.getElementById('scPoOrderDate')?.value,
-        Expected_Delivery: document.getElementById('scPoExpected')?.value || '',
         Notes: document.getElementById('scPoNotes')?.value || '',
         Status: status,
         lines
@@ -5056,9 +5523,11 @@ $productPerformance = $ownerController->getProductPerformance();
 
   document.getElementById('scAddSupplierBtn')?.addEventListener('click', () => openSupplierForm(null));
   document.getElementById('scAddItemBtn')?.addEventListener('click', () => openItemForm(null));
+  document.getElementById('invIngrAddBtn')?.addEventListener('click', () => openItemForm(null));
   document.getElementById('scAddPoBtn')?.addEventListener('click', openPoForm);
   document.getElementById('scAddPoLineBtn')?.addEventListener('click', () => {
     document.getElementById('scPoLines')?.appendChild(buildPoLineRow());
+    updatePoGrandTotal();
   });
   document.getElementById('scSavePoBtn')?.addEventListener('click', () => savePurchaseOrder('Ordered').catch(e => alert(e.message)));
   document.getElementById('scSavePoDraftBtn')?.addEventListener('click', () => savePurchaseOrder('Draft').catch(e => alert(e.message)));
@@ -5118,7 +5587,59 @@ $productPerformance = $ownerController->getProductPerformance();
     } catch (e) { alert(e.message); }
   });
 
-  document.getElementById('supply-chain')?.addEventListener('click', async (e) => {
+  // ---------- Quick stock adjustment ----------
+  const adjustModal = document.getElementById('scAdjustModal')
+    ? bootstrap.Modal.getOrCreateInstance(document.getElementById('scAdjustModal'))
+    : null;
+
+  function openAdjustForm(item) {
+    if (!item) return;
+    document.getElementById('scAdjustItemId').value = item.Item_ID;
+    document.getElementById('scAdjustTitle').textContent = 'Adjust stock — ' + item.Item_Name;
+    document.getElementById('scAdjustCurrent').textContent =
+      Number(item.Stock_Quantity).toFixed(2) + ' ' + (item.Unit || '');
+    document.getElementById('scAdjustNewQty').value = Number(item.Stock_Quantity).toFixed(2);
+    document.getElementById('scAdjustReason').value = 'recount';
+    document.getElementById('scAdjustNotes').value = '';
+    adjustModal?.show();
+  }
+
+  document.getElementById('scAdjustSubmit')?.addEventListener('click', async () => {
+    const itemId = parseInt(document.getElementById('scAdjustItemId').value || '0', 10);
+    const item = scState.items.find(x => x.Item_ID == itemId);
+    if (!item) return;
+    const newQty = parseFloat(document.getElementById('scAdjustNewQty').value || '0');
+    if (isNaN(newQty) || newQty < 0) { alert('Enter a valid count.'); return; }
+    const delta = +(newQty - Number(item.Stock_Quantity)).toFixed(3);
+    if (delta === 0) { alert('No change. Adjust the count first.'); return; }
+    const reason = document.getElementById('scAdjustReason').value;
+    const notes = document.getElementById('scAdjustNotes').value.trim();
+    const btn = document.getElementById('scAdjustSubmit');
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = 'Saving...';
+    try {
+      await scFetch('supply-adjust-item-stock', {
+        method: 'POST',
+        json: { Item_ID: itemId, Delta: delta, Reason: reason, Notes: notes }
+      });
+      adjustModal?.hide();
+      await loadSupplyChain();
+    } catch (err) {
+      alert(err.message || 'Failed to adjust stock.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  });
+
+  // Delegate item-related clicks across both Supply Chain and the Inventory
+  // page (the Ingredients sub-tab mirrors the same data).
+  ['supply-chain', 'inventory'].forEach((rootId) => {
+    document.getElementById(rootId)?.addEventListener('click', supplyChainClickHandler);
+  });
+
+  async function supplyChainClickHandler(e) {
     const editSup = e.target.closest('.sc-edit-supplier');
     if (editSup) {
       const s = scState.suppliers.find(x => String(x.Supplier_ID) === editSup.dataset.id);
@@ -5140,8 +5661,14 @@ $productPerformance = $ownerController->getProductPerformance();
       if (item) openItemForm(item);
       return;
     }
+    const adjustItem = e.target.closest('.sc-adjust-item');
+    if (adjustItem) {
+      const item = scState.items.find(x => String(x.Item_ID) === adjustItem.dataset.id);
+      if (item) openAdjustForm(item);
+      return;
+    }
     const delItem = e.target.closest('.sc-del-item');
-    if (delItem && confirm('Delete this material?')) {
+    if (delItem && confirm('Delete this ingredient?')) {
       const fd = new FormData();
       fd.append('action', 'supply-delete-item');
       fd.append('Item_ID', delItem.dataset.id);
@@ -5174,18 +5701,260 @@ $productPerformance = $ownerController->getProductPerformance();
         const lineRows = (po.lines || []).map(l =>
           `<tr><td>${esc(l.Item_Name)}</td><td>${Number(l.Quantity_Ordered).toFixed(2)}</td><td>${Number(l.Quantity_Received).toFixed(2)}</td><td>₱${Number(l.Unit_Cost).toFixed(2)}</td></tr>`
         ).join('');
+        const supplierBlock = ['Cancelled', 'Received'].includes(po.Status)
+          ? ''
+          : `<div class="alert alert-light border d-flex flex-wrap align-items-center gap-2 mb-3">
+               <div class="flex-grow-1">
+                 <div class="small text-muted">Supplier confirmation link</div>
+                 <code class="small text-break" id="scPoShareUrl">Loading...</code>
+               </div>
+               <button type="button" class="btn btn-sm btn-outline-primary" id="scPoShareCopy" data-id="${po.PO_ID}">Copy link</button>
+               <button type="button" class="btn btn-sm btn-success" id="scPoShareEmail" data-id="${po.PO_ID}"><i class="bi bi-envelope"></i> Email to supplier</button>
+             </div>`;
+        const supplierNotes = po.Supplier_Notes
+          ? `<div class="alert alert-success small mb-3"><strong>Supplier notes:</strong> ${esc(po.Supplier_Notes)}</div>`
+          : '';
         document.getElementById('scPoDetailBody').innerHTML = `
           <p><strong>Status:</strong> ${esc(po.Status)} &nbsp; <strong>Total:</strong> ₱${Number(po.Total_Amount).toFixed(2)}</p>
           <p class="text-muted mb-3">${esc(po.Notes || '')}</p>
-          <table class="table table-sm"><thead><tr><th>Item</th><th>Ordered</th><th>Received</th><th>Unit Cost</th></tr></thead><tbody>${lineRows}</tbody></table>`;
+          ${supplierBlock}
+          ${supplierNotes}
+          <table class="table table-sm"><thead><tr><th>Item</th><th>Ordered</th><th>Received</th><th>Unit Cost</th></tr></thead><tbody>${lineRows}</tbody></table>
+          <div id="scPoIssuesContainer"></div>`;
         document.getElementById('scPoDetailFooter').innerHTML = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>';
         poDetailModal?.show();
+        // Lazy-load the share link (issues a token on first request if needed).
+        if (!['Cancelled', 'Received'].includes(po.Status)) {
+          fetch('?action=supply-po-link&po_id=' + po.PO_ID)
+            .then(r => r.json())
+            .then(j => {
+              const span = document.getElementById('scPoShareUrl');
+              if (span && j.status === 'success' && j.data?.url) span.textContent = j.data.url;
+              else if (span) span.textContent = '(unavailable)';
+            })
+            .catch(() => { const s = document.getElementById('scPoShareUrl'); if (s) s.textContent = '(error)'; });
+        }
+        // Lazy-load issues for received/partial POs.
+        if (['Received', 'Partial'].includes(po.Status)) {
+          loadPoIssuesIntoDetail(po.PO_ID);
+        }
       } catch (err) { alert(err.message); }
+    }
+    const poShare = e.target.closest('.sc-po-link');
+    if (poShare) {
+      try {
+        const res = await fetch('?action=supply-po-link&po_id=' + poShare.dataset.id);
+        const data = await res.json();
+        if (data.status !== 'success' || !data.data?.url) throw new Error(data.message || 'Could not generate link');
+        const url = data.data.url;
+        try {
+          await navigator.clipboard.writeText(url);
+          poShare.classList.remove('btn-outline-info');
+          poShare.classList.add('btn-success');
+          const original = poShare.innerHTML;
+          poShare.textContent = 'Copied!';
+          setTimeout(() => { poShare.innerHTML = original; poShare.classList.remove('btn-success'); poShare.classList.add('btn-outline-info'); }, 1800);
+        } catch (_) {
+          window.prompt('Copy this supplier confirmation link:', url);
+        }
+      } catch (err) { alert(err.message); }
+    }
+    const poCopyDetail = e.target.closest('#scPoShareCopy');
+    if (poCopyDetail) {
+      const url = document.getElementById('scPoShareUrl')?.textContent || '';
+      if (!url || url === 'Loading...' || url.startsWith('(')) return;
+      try {
+        await navigator.clipboard.writeText(url);
+        poCopyDetail.textContent = 'Copied!';
+        setTimeout(() => { poCopyDetail.textContent = 'Copy link'; }, 1500);
+      } catch (_) {
+        window.prompt('Copy this supplier confirmation link:', url);
+      }
+    }
+    const poEmail = e.target.closest('#scPoShareEmail');
+    if (poEmail) {
+      const original = poEmail.innerHTML;
+      poEmail.disabled = true;
+      poEmail.textContent = 'Sending...';
+      try {
+        const data = await scFetch('supply-email-po-link', { method: 'POST', json: { po_id: parseInt(poEmail.dataset.id, 10) } });
+        poEmail.innerHTML = '<i class="bi bi-check2"></i> Sent';
+        poEmail.classList.remove('btn-success');
+        poEmail.classList.add('btn-outline-success');
+        if (data?.message) {
+          // Lightweight toast — reuse existing alert() to stay consistent with other supply-chain UX.
+          alert(data.message);
+        }
+        setTimeout(() => {
+          poEmail.innerHTML = original;
+          poEmail.classList.remove('btn-outline-success');
+          poEmail.classList.add('btn-success');
+          poEmail.disabled = false;
+        }, 2500);
+      } catch (err) {
+        alert(err.message || 'Failed to email link.');
+        poEmail.innerHTML = original;
+        poEmail.disabled = false;
+      }
+    }
+    const poIssueBtn = e.target.closest('.sc-po-issue');
+    if (poIssueBtn) {
+      openPoIssueModal(parseInt(poIssueBtn.dataset.id, 10));
+      return;
+    }
+    const issueResolve = e.target.closest('.sc-issue-status');
+    if (issueResolve) {
+      const issueId = parseInt(issueResolve.dataset.id, 10);
+      const newStatus = issueResolve.dataset.status;
+      const poId = parseInt(issueResolve.dataset.po, 10);
+      try {
+        await scFetch('supply-update-po-issue', { method: 'POST', json: { Issue_ID: issueId, Status: newStatus } });
+        await loadPoIssuesIntoDetail(poId);
+      } catch (err) { alert(err.message); }
+    }
+  } // end supplyChainClickHandler
+
+  // ---------- Material issue modal ----------
+  const issueModal = window.bootstrap?.Modal
+    ? new bootstrap.Modal(document.getElementById('scIssueModal'))
+    : null;
+
+  function openPoIssueModal(poId) {
+    if (!poId) return;
+    document.getElementById('scIssuePoId').value = poId;
+    document.getElementById('scIssueType').value = 'Damaged';
+    document.getElementById('scIssueAction').value = 'Replacement';
+    document.getElementById('scIssueQty').value = '0';
+    document.getElementById('scIssueNotes').value = '';
+
+    // Populate the line dropdown from the current PO state (if known) or fetch detail.
+    const lineSel = document.getElementById('scIssueLine');
+    lineSel.innerHTML = '<option value="">— Whole order —</option>';
+    fetch('?action=supply-purchase-order-detail&po_id=' + poId)
+      .then(r => r.json())
+      .then(j => {
+        if (j.status !== 'success') return;
+        (j.data.lines || []).forEach(l => {
+          const opt = document.createElement('option');
+          opt.value = l.Line_ID;
+          opt.textContent = `${l.Item_Name} (received ${Number(l.Quantity_Received).toFixed(2)} ${l.Unit || ''})`;
+          lineSel.appendChild(opt);
+        });
+      });
+    issueModal?.show();
+  }
+
+  document.getElementById('scIssueSubmit')?.addEventListener('click', async () => {
+    const btn = document.getElementById('scIssueSubmit');
+    const poId = parseInt(document.getElementById('scIssuePoId').value || '0', 10);
+    if (!poId) return;
+    const payload = {
+      PO_ID: poId,
+      Line_ID: parseInt(document.getElementById('scIssueLine').value || '0', 10) || null,
+      Issue_Type: document.getElementById('scIssueType').value,
+      Action_Requested: document.getElementById('scIssueAction').value,
+      Quantity_Affected: parseFloat(document.getElementById('scIssueQty').value || '0') || 0,
+      Buyer_Notes: document.getElementById('scIssueNotes').value || ''
+    };
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = 'Filing...';
+    try {
+      const res = await scFetch('supply-create-po-issue', { method: 'POST', json: payload });
+      issueModal?.hide();
+      alert(res.message || 'Issue filed.');
+      // Refresh the detail issues block if open.
+      if (document.getElementById('scPoIssuesContainer')) {
+        await loadPoIssuesIntoDetail(poId);
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to file issue.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
     }
   });
 
+  async function loadPoIssuesIntoDetail(poId) {
+    const container = document.getElementById('scPoIssuesContainer');
+    if (!container) return;
+    container.innerHTML = '<div class="text-muted small mt-3">Loading material issues...</div>';
+    try {
+      const r = await fetch('?action=supply-po-issues&po_id=' + poId);
+      const j = await r.json();
+      if (j.status !== 'success') throw new Error(j.message || 'Failed to load issues.');
+      container.innerHTML = renderIssuesBlock(poId, j.data || []);
+    } catch (err) {
+      container.innerHTML = `<div class="alert alert-warning small mt-3">Could not load issues: ${esc(err.message)}</div>`;
+    }
+  }
+
+  function renderIssuesBlock(poId, issues) {
+    const filed = (issues || []).length;
+    const head = `
+      <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-2">
+        <h6 class="mb-0" style="color:#4d2e00;font-weight:700;">
+          Material Issues ${filed ? `<span class="badge bg-warning text-dark">${filed}</span>` : ''}
+        </h6>
+        <button type="button" class="btn btn-sm btn-outline-warning sc-po-issue" data-id="${poId}">
+          <i class="bi bi-plus"></i> Report new problem
+        </button>
+      </div>`;
+    if (!filed) {
+      return head + '<p class="text-muted small mb-0">No issues filed for this order.</p>';
+    }
+    const rows = issues.map(i => {
+      const statusColor = {
+        Open: 'bg-warning text-dark',
+        Acknowledged: 'bg-info text-dark',
+        Resolved: 'bg-success',
+        Rejected: 'bg-secondary'
+      }[i.Status] || 'bg-secondary';
+      const itemLabel = i.Item_Name ? esc(i.Item_Name) : '<em>Whole order</em>';
+      const reply = i.Supplier_Reply
+        ? `<div class="alert alert-light border small mb-0 mt-2"><strong>Supplier reply:</strong> ${esc(i.Supplier_Reply)}</div>`
+        : '';
+      const buyerNotes = i.Buyer_Notes ? `<div class="small text-muted mt-1">${esc(i.Buyer_Notes)}</div>` : '';
+      const buttons = ['Open', 'Acknowledged'].includes(i.Status)
+        ? `<button type="button" class="btn btn-sm btn-outline-success sc-issue-status" data-id="${i.Issue_ID}" data-po="${poId}" data-status="Resolved">Mark resolved</button>
+           <button type="button" class="btn btn-sm btn-outline-secondary sc-issue-status" data-id="${i.Issue_ID}" data-po="${poId}" data-status="Rejected">Reject</button>`
+        : `<button type="button" class="btn btn-sm btn-outline-warning sc-issue-status" data-id="${i.Issue_ID}" data-po="${poId}" data-status="Open">Reopen</button>`;
+      return `
+        <div class="border rounded p-3 mb-2" style="background:#fdf8ee;">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <div>
+              <div class="fw-semibold">${itemLabel} <span class="text-muted small">· ${esc((i.Issue_Type || '').replace('_', ' '))}</span></div>
+              <div class="small text-muted">Action requested: <strong>${esc((i.Action_Requested || '').replace('_', ' '))}</strong> · Qty affected: ${Number(i.Quantity_Affected || 0).toFixed(2)}</div>
+              ${buyerNotes}
+            </div>
+            <span class="badge ${statusColor}">${esc(i.Status)}</span>
+          </div>
+          ${reply}
+          <div class="mt-2 d-flex flex-wrap gap-1">${buttons}</div>
+        </div>`;
+    }).join('');
+    return head + rows;
+  }
+
   const urlPage = new URLSearchParams(window.location.search).get('page');
   if (urlPage === 'supply-chain') {
+    setTimeout(() => loadSupplyChain(), 300);
+  }
+
+  // The Inventory page now has an Ingredients sub-tab — make sure the data
+  // is fetched whenever the user navigates into Inventory or switches to
+  // that tab, so it doesn't render an empty table.
+  document.querySelector('.sidebar .nav-link[data-page="inventory"]')?.addEventListener('click', () => {
+    setTimeout(() => loadSupplyChain(), 200);
+  });
+  document.getElementById('inv-tab-ingredients')?.addEventListener('shown.bs.tab', () => {
+    loadSupplyChain();
+  });
+  document.getElementById('invIngrGoSupplyChain')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.querySelector('.sidebar .nav-link[data-page="supply-chain"]')?.click();
+  });
+  if (urlPage === 'inventory') {
     setTimeout(() => loadSupplyChain(), 300);
   }
 })();

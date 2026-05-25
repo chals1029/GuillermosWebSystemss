@@ -310,6 +310,10 @@ class OwnerController
             $this->requirePost();
             $this->deleteStaff();
             break;
+        case 'change_my_password':
+            $this->requirePost();
+            $this->changeMyPassword();
+            break;
 
         default:
             $this->jsonResponse([
@@ -1018,12 +1022,152 @@ class OwnerController
         $stmt->bind_param('ssssi', $name, $username, $email, $phone, $id);
         if ($stmt->execute()) {
             $stmt->close();
+
+            // Optional: update password if a new one was supplied. Empty
+            // string means "leave the existing password alone".
+            $newPassword = (string)($payload['Password'] ?? '');
+            if ($newPassword !== '') {
+                $error = $this->setStaffPassword($id, $newPassword);
+                if ($error !== null) {
+                    $this->jsonResponse(['status' => 'error', 'message' => $error], 422);
+                    return;
+                }
+                $this->jsonResponse(['status' => 'success', 'message' => 'Staff updated and password reset.']);
+                return;
+            }
+
             $this->jsonResponse(['status' => 'success', 'message' => 'Staff updated successfully']);
             return;
         }
         $err = $stmt->error;
         $stmt->close();
         $this->jsonResponse(['status' => 'error', 'message' => 'Failed to update staff: ' . $err], 500);
+    }
+
+    /**
+     * Hash and persist a new password for a staff user. Validates against the
+     * shared PasswordPolicy so the rules stay consistent with sign-up and
+     * password reset flows.
+     *
+     * @return string|null  Null on success, error message on failure.
+     */
+    private function setStaffPassword(int $userId, string $rawPassword): ?string
+    {
+        require_once __DIR__ . '/PasswordPolicy.php';
+        $checks = passwordPolicyChecks($rawPassword);
+        if (in_array(false, $checks, true) || array_filter($checks, static fn($v) => $v == 0)) {
+            // Build a friendly summary of which rules failed.
+            $failures = [];
+            if (empty($checks['minLength'])) { $failures[] = 'at least 8 characters'; }
+            if (empty($checks['hasUpper']))  { $failures[] = 'an uppercase letter'; }
+            if (empty($checks['hasLower']))  { $failures[] = 'a lowercase letter'; }
+            if (empty($checks['hasNumber'])) { $failures[] = 'a number'; }
+            if (empty($checks['hasSpecial'])){ $failures[] = 'a special character'; }
+            return 'Password must include ' . implode(', ', $failures) . '.';
+        }
+
+        $hash = password_hash($rawPassword, PASSWORD_DEFAULT);
+        $stmt = $this->conn->prepare('UPDATE users SET Password = ? WHERE User_ID = ? AND User_Role = "Staff"');
+        if (!$stmt) {
+            return 'Database error while updating password.';
+        }
+        $stmt->bind_param('si', $hash, $userId);
+        $ok = $stmt->execute();
+        $stmt->close();
+        if (!$ok) {
+            return 'Failed to update password.';
+        }
+        // Audit trail (no plaintext logged).
+        $actor = (int)($_SESSION['user_id'] ?? 0);
+        error_log(sprintf('Staff password reset: target=%d actor=%d', $userId, $actor));
+        return null;
+    }
+
+    /**
+     * Owner-only: change the currently-logged-in user's own password.
+     * Requires the current password to be re-entered as a confirmation.
+     */
+    public function changeMyPassword(): void
+    {
+        if (session_status() !== PHP_SESSION_ACTIVE) session_start();
+        $role = strtolower((string)($_SESSION['user_role'] ?? ''));
+        if (!in_array($role, ['owner', 'admin'], true)) {
+            $this->jsonResponse(['status' => 'error', 'message' => 'Unauthorized'], 403);
+            return;
+        }
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        if ($userId <= 0) {
+            $this->jsonResponse(['status' => 'error', 'message' => 'Session expired. Please log in again.'], 401);
+            return;
+        }
+
+        header('Content-Type: application/json');
+        $payload = $this->getRequestData();
+        $current = (string)($payload['current_password'] ?? '');
+        $next    = (string)($payload['new_password'] ?? '');
+        $confirm = (string)($payload['confirm_password'] ?? '');
+
+        if ($current === '' || $next === '' || $confirm === '') {
+            $this->jsonResponse(['status' => 'error', 'message' => 'All fields are required.'], 422);
+            return;
+        }
+        if ($next !== $confirm) {
+            $this->jsonResponse(['status' => 'error', 'message' => 'New passwords do not match.'], 422);
+            return;
+        }
+        if ($next === $current) {
+            $this->jsonResponse(['status' => 'error', 'message' => 'New password must differ from the current one.'], 422);
+            return;
+        }
+
+        // Verify the current password before allowing any change.
+        $stmt = $this->conn->prepare('SELECT Password FROM users WHERE User_ID = ? LIMIT 1');
+        if (!$stmt) {
+            $this->jsonResponse(['status' => 'error', 'message' => 'Database error'], 500);
+            return;
+        }
+        $stmt->bind_param('i', $userId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        if (!$row || !password_verify($current, (string)$row['Password'])) {
+            $this->jsonResponse(['status' => 'error', 'message' => 'Current password is incorrect.'], 401);
+            return;
+        }
+
+        // Validate the new password against the shared policy.
+        require_once __DIR__ . '/PasswordPolicy.php';
+        $checks = passwordPolicyChecks($next);
+        if (in_array(false, $checks, true)) {
+            $failures = [];
+            if (empty($checks['minLength'])) { $failures[] = 'at least 8 characters'; }
+            if (empty($checks['hasUpper']))  { $failures[] = 'an uppercase letter'; }
+            if (empty($checks['hasLower']))  { $failures[] = 'a lowercase letter'; }
+            if (empty($checks['hasNumber'])) { $failures[] = 'a number'; }
+            if (empty($checks['hasSpecial'])){ $failures[] = 'a special character'; }
+            $this->jsonResponse([
+                'status'  => 'error',
+                'message' => 'Password must include ' . implode(', ', $failures) . '.',
+            ], 422);
+            return;
+        }
+
+        $hash = password_hash($next, PASSWORD_DEFAULT);
+        $stmt = $this->conn->prepare('UPDATE users SET Password = ? WHERE User_ID = ?');
+        if (!$stmt) {
+            $this->jsonResponse(['status' => 'error', 'message' => 'Database error'], 500);
+            return;
+        }
+        $stmt->bind_param('si', $hash, $userId);
+        $ok = $stmt->execute();
+        $stmt->close();
+        if (!$ok) {
+            $this->jsonResponse(['status' => 'error', 'message' => 'Failed to update password.'], 500);
+            return;
+        }
+
+        error_log(sprintf('Self password change: user=%d role=%s', $userId, $role));
+        $this->jsonResponse(['status' => 'success', 'message' => 'Password changed successfully.']);
     }
 
     public function deleteStaff(): void

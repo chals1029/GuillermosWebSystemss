@@ -848,6 +848,409 @@ class EmailApiController
         }
     }
 
+    /**
+     * Send the secure supplier confirmation link via email.
+     *
+     * @param string $email   Supplier's email address (already provided by admin).
+     * @param string $name    Recipient name (Contact_Person or Supplier_Name).
+     * @param array  $details {
+     *     po_id: int,
+     *     supplier_name: string,
+     *     order_date: string,
+     *     total_amount: float|string,
+     *     line_count: int,
+     *     notes: string,
+     *     url: string
+     * }
+     * @return bool|string  true on success, error string otherwise.
+     */
+    public static function sendSupplierPoLinkEmail(string $email, string $name, array $details): bool|string
+    {
+        $sanitizedEmail = filter_var(trim($email), FILTER_SANITIZE_EMAIL);
+        if (!filter_var($sanitizedEmail, FILTER_VALIDATE_EMAIL)) {
+            self::logEvent('Invalid supplier email for PO link: ' . $email);
+            return 'Invalid recipient email address.';
+        }
+
+        $normalizedName = trim($name) === '' ? 'Supplier' : trim($name);
+        $poId       = (int)($details['po_id'] ?? 0);
+        $supplier   = htmlspecialchars((string)($details['supplier_name'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $orderDate  = htmlspecialchars((string)($details['order_date'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $total      = (float)($details['total_amount'] ?? 0);
+        $lineCount  = (int)($details['line_count'] ?? 0);
+        $notes      = trim((string)($details['notes'] ?? ''));
+        $url        = (string)($details['url'] ?? '');
+
+        if ($url === '') {
+            return 'Confirmation link could not be generated.';
+        }
+
+        $safeName  = htmlspecialchars($normalizedName, ENT_QUOTES, 'UTF-8');
+        $safeUrl   = htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
+        $safeNotes = $notes === '' ? '' : nl2br(htmlspecialchars($notes, ENT_QUOTES, 'UTF-8'));
+
+        $htmlBody = <<<HTML
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Purchase Order #{$poId}</title>
+</head>
+<body style="margin:0;padding:0;background:#fff7ec;font-family:'Segoe UI',Tahoma,Geneva,sans-serif;color:#2b2b2b;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff7ec;padding:32px 16px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 32px rgba(77,46,0,.08);">
+        <tr>
+          <td style="background:#4d2e00;color:#f4e9c9;padding:24px 28px;font-family:'Lobster','Brush Script MT',cursive;font-size:28px;letter-spacing:.5px;">
+            Guillermo's Café
+            <span style="float:right;font-family:'Segoe UI',sans-serif;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;opacity:.8;padding-top:10px;">Supplier Portal</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px 28px 8px;">
+            <h1 style="margin:0 0 8px;color:#4d2e00;font-size:22px;">Purchase Order #{$poId}</h1>
+            <p style="margin:0 0 18px;color:#6c5a3a;font-size:15px;line-height:1.5;">
+              Hi {$safeName}, Guillermo's Café would like to place a new purchase order with <strong>{$supplier}</strong>.
+              Please review the order and confirm your fulfilment time using the secure link below.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 28px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fbf3e3;border-radius:12px;padding:16px 18px;">
+              <tr>
+                <td style="font-size:12px;color:#8a7250;text-transform:uppercase;letter-spacing:.08em;padding-bottom:4px;">Order Date</td>
+                <td style="font-size:12px;color:#8a7250;text-transform:uppercase;letter-spacing:.08em;padding-bottom:4px;text-align:right;">Lines / Total</td>
+              </tr>
+              <tr>
+                <td style="font-weight:600;color:#4d2e00;font-size:15px;">{$orderDate}</td>
+                <td style="font-weight:600;color:#4d2e00;font-size:15px;text-align:right;">{$lineCount} item(s) · ₱
+HTML;
+        $htmlBody .= number_format($total, 2);
+        $htmlBody .= <<<HTML
+</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+HTML;
+
+        if ($safeNotes !== '') {
+            $htmlBody .= <<<HTML
+        <tr>
+          <td style="padding:18px 28px 0;">
+            <div style="background:#fff7ec;border-left:4px solid #c4882a;padding:12px 14px;border-radius:6px;font-size:14px;color:#5a4423;">
+              <strong>Notes from buyer:</strong><br>{$safeNotes}
+            </div>
+          </td>
+        </tr>
+HTML;
+        }
+
+        $htmlBody .= <<<HTML
+        <tr>
+          <td align="center" style="padding:28px;">
+            <a href="{$safeUrl}"
+               style="display:inline-block;background:#4d2e00;color:#fff;text-decoration:none;font-weight:600;padding:14px 28px;border-radius:10px;font-size:16px;letter-spacing:.02em;">
+               Review &amp; Confirm Order
+            </a>
+            <p style="margin:14px 0 0;font-size:12px;color:#8a7250;">
+              Or copy this link into your browser:<br>
+              <span style="word-break:break-all;color:#5a4423;">{$safeUrl}</span>
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 28px 24px;font-size:12px;color:#8a7250;line-height:1.6;">
+            This link is unique to your business and should not be shared. No login is required —
+            click the button, choose how many days until delivery, and you're done.
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#fbf3e3;padding:16px 28px;font-size:11px;color:#8a7250;text-align:center;">
+            Guillermo's Café · Supplier Coordination Team
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
+HTML;
+
+        $altBody = "Hi {$normalizedName},\n\n"
+            . "Guillermo's Café has issued Purchase Order #{$poId} to {$details['supplier_name']}.\n"
+            . "Please confirm the order using this secure link:\n\n{$url}\n\n"
+            . "Thank you,\nGuillermo's Café";
+
+        $mailConfig = self::mailConfig();
+        $mail = self::buildMailer($mailConfig);
+
+        try {
+            $mail->addAddress($sanitizedEmail, $normalizedName);
+            $mail->isHTML(true);
+            $mail->Subject = "Guillermo's Café · Purchase Order #{$poId} - Action Required";
+            $mail->Body = $htmlBody;
+            $mail->AltBody = $altBody;
+
+            self::logEvent(sprintf('Sending supplier PO link to %s for PO #%d', $sanitizedEmail, $poId));
+            $mail->send();
+            self::logEvent(sprintf('Supplier PO link sent successfully to %s for PO #%d', $sanitizedEmail, $poId));
+            return true;
+        } catch (PHPMailerException $e) {
+            $errorMessage = 'Failed to send supplier PO email. ' . $e->getMessage();
+            if (!empty($mail->ErrorInfo)) {
+                $errorMessage .= ' | Mailer error: ' . $mail->ErrorInfo;
+            }
+            self::logEvent($errorMessage);
+            return $errorMessage;
+        }
+    }
+
+    /**
+     * Send a notification confirming materials were received.
+     *
+     * @param array $details {
+     *     po_id: int, supplier_name: string, received_date: string,
+     *     line_count: int, total_amount: float, url: string
+     * }
+     */
+    public static function sendSupplierPoReceivedEmail(string $email, string $name, array $details): bool|string
+    {
+        $sanitizedEmail = filter_var(trim($email), FILTER_SANITIZE_EMAIL);
+        if (!filter_var($sanitizedEmail, FILTER_VALIDATE_EMAIL)) {
+            self::logEvent('Invalid supplier email for PO receipt: ' . $email);
+            return 'Invalid recipient email address.';
+        }
+
+        $normalizedName = trim($name) === '' ? 'Supplier' : trim($name);
+        $poId        = (int)($details['po_id'] ?? 0);
+        $supplier    = htmlspecialchars((string)($details['supplier_name'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $receivedOn  = htmlspecialchars((string)($details['received_date'] ?? date('M d, Y')), ENT_QUOTES, 'UTF-8');
+        $total       = (float)($details['total_amount'] ?? 0);
+        $lineCount   = (int)($details['line_count'] ?? 0);
+        $url         = (string)($details['url'] ?? '');
+        $safeName    = htmlspecialchars($normalizedName, ENT_QUOTES, 'UTF-8');
+        $safeUrl     = htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
+        $totalFmt    = number_format($total, 2);
+
+        $linkBlock = $safeUrl === '' ? '' : <<<HTML
+        <tr>
+          <td align="center" style="padding:20px 28px 28px;">
+            <a href="{$safeUrl}"
+               style="display:inline-block;background:#4d2e00;color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:10px;font-size:14px;">
+              View Order Details
+            </a>
+          </td>
+        </tr>
+HTML;
+
+        $htmlBody = <<<HTML
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>PO #{$poId} Received</title></head>
+<body style="margin:0;padding:0;background:#fff7ec;font-family:'Segoe UI',Tahoma,Geneva,sans-serif;color:#2b2b2b;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff7ec;padding:32px 16px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 32px rgba(77,46,0,.08);">
+        <tr>
+          <td style="background:#4d2e00;color:#f4e9c9;padding:24px 28px;font-family:'Lobster','Brush Script MT',cursive;font-size:28px;letter-spacing:.5px;">
+            Guillermo's Café
+            <span style="float:right;font-family:'Segoe UI',sans-serif;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;opacity:.8;padding-top:10px;">Supplier Portal</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px 28px 8px;">
+            <div style="display:inline-block;background:#d6f0e2;color:#14633c;padding:6px 14px;border-radius:999px;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:14px;">
+              ✓ Received
+            </div>
+            <h1 style="margin:0 0 8px;color:#4d2e00;font-size:22px;">Materials received — PO #{$poId}</h1>
+            <p style="margin:0 0 18px;color:#6c5a3a;font-size:15px;line-height:1.5;">
+              Hi {$safeName}, this is to confirm that Guillermo's Café has received the materials from <strong>{$supplier}</strong>.
+              Thank you for fulfilling this order.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 28px 12px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fbf3e3;border-radius:12px;padding:16px 18px;">
+              <tr>
+                <td style="font-size:12px;color:#8a7250;text-transform:uppercase;letter-spacing:.08em;padding-bottom:4px;">Received On</td>
+                <td style="font-size:12px;color:#8a7250;text-transform:uppercase;letter-spacing:.08em;padding-bottom:4px;text-align:right;">Lines / Total</td>
+              </tr>
+              <tr>
+                <td style="font-weight:600;color:#4d2e00;font-size:15px;">{$receivedOn}</td>
+                <td style="font-weight:600;color:#4d2e00;font-size:15px;text-align:right;">{$lineCount} item(s) · ₱{$totalFmt}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px 28px 0;font-size:13px;color:#6c5a3a;line-height:1.55;">
+            If anything in the shipment does not match the agreed order — damaged goods, short quantities,
+            wrong items, or expired stock — we'll reach out shortly with a refund or replacement request
+            using this same secure link.
+          </td>
+        </tr>
+        {$linkBlock}
+        <tr>
+          <td style="background:#fbf3e3;padding:16px 28px;font-size:11px;color:#8a7250;text-align:center;">
+            Guillermo's Café · Supplier Coordination Team
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>
+HTML;
+
+        $altBody = "Hi {$normalizedName},\n\nGuillermo's Café has received the materials for PO #{$poId} from {$details['supplier_name']} on {$details['received_date']}.\nThank you.\n";
+
+        $mailConfig = self::mailConfig();
+        $mail = self::buildMailer($mailConfig);
+        try {
+            $mail->addAddress($sanitizedEmail, $normalizedName);
+            $mail->isHTML(true);
+            $mail->Subject = "Guillermo's Café · PO #{$poId} received - thank you";
+            $mail->Body = $htmlBody;
+            $mail->AltBody = $altBody;
+            self::logEvent(sprintf('Sending PO received email to %s for PO #%d', $sanitizedEmail, $poId));
+            $mail->send();
+            return true;
+        } catch (PHPMailerException $e) {
+            $errorMessage = 'Failed to send PO received email. ' . $e->getMessage();
+            if (!empty($mail->ErrorInfo)) { $errorMessage .= ' | Mailer error: ' . $mail->ErrorInfo; }
+            self::logEvent($errorMessage);
+            return $errorMessage;
+        }
+    }
+
+    /**
+     * Notify a supplier that an issue (damage / short qty / etc.) was filed
+     * against one of their delivered POs and a refund or replacement is being
+     * requested.
+     *
+     * @param array $details {
+     *     po_id: int, supplier_name: string, item_name: string,
+     *     issue_type: string, action: string, quantity_affected: float,
+     *     buyer_notes: string, url: string
+     * }
+     */
+    public static function sendSupplierIssueEmail(string $email, string $name, array $details): bool|string
+    {
+        $sanitizedEmail = filter_var(trim($email), FILTER_SANITIZE_EMAIL);
+        if (!filter_var($sanitizedEmail, FILTER_VALIDATE_EMAIL)) {
+            self::logEvent('Invalid supplier email for issue notification: ' . $email);
+            return 'Invalid recipient email address.';
+        }
+
+        $normalizedName = trim($name) === '' ? 'Supplier' : trim($name);
+        $poId        = (int)($details['po_id'] ?? 0);
+        $supplier    = htmlspecialchars((string)($details['supplier_name'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $itemName    = htmlspecialchars((string)($details['item_name'] ?? '—'), ENT_QUOTES, 'UTF-8');
+        $issueType   = htmlspecialchars(str_replace('_', ' ', (string)($details['issue_type'] ?? 'Issue')), ENT_QUOTES, 'UTF-8');
+        $action      = htmlspecialchars(str_replace('_', ' ', (string)($details['action'] ?? 'Replacement')), ENT_QUOTES, 'UTF-8');
+        $qty         = (float)($details['quantity_affected'] ?? 0);
+        $buyerNotes  = trim((string)($details['buyer_notes'] ?? ''));
+        $url         = (string)($details['url'] ?? '');
+        $safeName    = htmlspecialchars($normalizedName, ENT_QUOTES, 'UTF-8');
+        $safeUrl     = htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
+        $safeNotes   = $buyerNotes === '' ? '' : nl2br(htmlspecialchars($buyerNotes, ENT_QUOTES, 'UTF-8'));
+        $qtyFmt      = number_format($qty, 2);
+
+        $notesBlock = $safeNotes === '' ? '' : <<<HTML
+        <tr>
+          <td style="padding:18px 28px 0;">
+            <div style="background:#fff7ec;border-left:4px solid #c4882a;padding:12px 14px;border-radius:6px;font-size:14px;color:#5a4423;">
+              <strong>Details from buyer:</strong><br>{$safeNotes}
+            </div>
+          </td>
+        </tr>
+HTML;
+
+        $htmlBody = <<<HTML
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>PO #{$poId} - Action Required</title></head>
+<body style="margin:0;padding:0;background:#fff7ec;font-family:'Segoe UI',Tahoma,Geneva,sans-serif;color:#2b2b2b;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff7ec;padding:32px 16px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 32px rgba(77,46,0,.08);">
+        <tr>
+          <td style="background:#4d2e00;color:#f4e9c9;padding:24px 28px;font-family:'Lobster','Brush Script MT',cursive;font-size:28px;letter-spacing:.5px;">
+            Guillermo's Café
+            <span style="float:right;font-family:'Segoe UI',sans-serif;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;opacity:.8;padding-top:10px;">Supplier Portal</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px 28px 8px;">
+            <div style="display:inline-block;background:#fde2e2;color:#9b1c1c;padding:6px 14px;border-radius:999px;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:14px;">
+              ⚠ Issue Reported
+            </div>
+            <h1 style="margin:0 0 8px;color:#4d2e00;font-size:22px;">Action requested on PO #{$poId}</h1>
+            <p style="margin:0 0 18px;color:#6c5a3a;font-size:15px;line-height:1.5;">
+              Hi {$safeName}, we found an issue with the materials received from <strong>{$supplier}</strong>
+              and would like to request a <strong>{$action}</strong>.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 28px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fbf3e3;border-radius:12px;padding:16px 18px;">
+              <tr><td style="font-size:12px;color:#8a7250;text-transform:uppercase;letter-spacing:.08em;padding-bottom:4px;">Item</td><td style="font-weight:600;color:#4d2e00;font-size:14px;text-align:right;">{$itemName}</td></tr>
+              <tr><td style="font-size:12px;color:#8a7250;text-transform:uppercase;letter-spacing:.08em;padding-bottom:4px;padding-top:10px;">Issue</td><td style="font-weight:600;color:#9b1c1c;font-size:14px;text-align:right;padding-top:10px;">{$issueType}</td></tr>
+              <tr><td style="font-size:12px;color:#8a7250;text-transform:uppercase;letter-spacing:.08em;padding-bottom:4px;padding-top:10px;">Quantity affected</td><td style="font-weight:600;color:#4d2e00;font-size:14px;text-align:right;padding-top:10px;">{$qtyFmt}</td></tr>
+              <tr><td style="font-size:12px;color:#8a7250;text-transform:uppercase;letter-spacing:.08em;padding-bottom:4px;padding-top:10px;">Action requested</td><td style="font-weight:700;color:#4d2e00;font-size:14px;text-align:right;padding-top:10px;">{$action}</td></tr>
+            </table>
+          </td>
+        </tr>
+        {$notesBlock}
+        <tr>
+          <td align="center" style="padding:28px;">
+            <a href="{$safeUrl}"
+               style="display:inline-block;background:#4d2e00;color:#fff;text-decoration:none;font-weight:600;padding:14px 28px;border-radius:10px;font-size:16px;letter-spacing:.02em;">
+               View &amp; Reply on Portal
+            </a>
+            <p style="margin:14px 0 0;font-size:12px;color:#8a7250;">
+              You can leave a reply on the same secure link previously sent for this order.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#fbf3e3;padding:16px 28px;font-size:11px;color:#8a7250;text-align:center;">
+            Guillermo's Café · Supplier Coordination Team
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>
+HTML;
+
+        $altBody = "Hi {$normalizedName},\n\n"
+            . "Guillermo's Café has reported a {$issueType} issue with PO #{$poId} ({$details['supplier_name']}).\n"
+            . "Item: {$details['item_name']} · Quantity affected: {$qtyFmt}\n"
+            . "Action requested: {$action}\n\n"
+            . ($buyerNotes === '' ? '' : "Notes: {$buyerNotes}\n\n")
+            . "View on portal: {$url}\n";
+
+        $mailConfig = self::mailConfig();
+        $mail = self::buildMailer($mailConfig);
+        try {
+            $mail->addAddress($sanitizedEmail, $normalizedName);
+            $mail->isHTML(true);
+            $mail->Subject = "Guillermo's Café · PO #{$poId} - {$action} requested";
+            $mail->Body = $htmlBody;
+            $mail->AltBody = $altBody;
+            self::logEvent(sprintf('Sending PO issue email to %s for PO #%d', $sanitizedEmail, $poId));
+            $mail->send();
+            return true;
+        } catch (PHPMailerException $e) {
+            $errorMessage = 'Failed to send PO issue email. ' . $e->getMessage();
+            if (!empty($mail->ErrorInfo)) { $errorMessage .= ' | Mailer error: ' . $mail->ErrorInfo; }
+            self::logEvent($errorMessage);
+            return $errorMessage;
+        }
+    }
+
     private static function logEvent(...$args): void
     {
         $logMessage = (string)($args[0] ?? '');
