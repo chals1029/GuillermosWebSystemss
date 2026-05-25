@@ -1,0 +1,4 @@
+# Local-only secrets, never commit
+secrets.local.env
+SECRETS.local.json
+*.secret

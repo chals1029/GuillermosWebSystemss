@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 DB='u435394025_guillermos_db'
-ASKPASS=$(mktemp); printf '#!/usr/bin/env bash\necho %q\n' 'Drake24Charles' > "$ASKPASS"; chmod 700 "$ASKPASS"
+_DEPLOY_DIR=$(dirname "${BASH_SOURCE[0]:-$0}"); . "$_DEPLOY_DIR/_loadsecrets.sh"; ASKPASS=$(mktemp); printf '#!/usr/bin/env bash\necho %q\n' "$VPS_PASSWORD" > "$ASKPASS"; chmod 700 "$ASKPASS"
 export SUDO_ASKPASS="$ASKPASS"
 trap 'rm -f "$ASKPASS"' EXIT
 sudo -A mysql -uroot "$DB" --table -e "

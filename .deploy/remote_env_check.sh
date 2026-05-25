@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 cd /var/www/guillermoscafe
-ASKPASS=$(mktemp); printf '#!/usr/bin/env bash\necho %q\n' 'Drake24Charles' > "$ASKPASS"; chmod 700 "$ASKPASS"
+_DEPLOY_DIR=$(dirname "${BASH_SOURCE[0]:-$0}"); . "$_DEPLOY_DIR/_loadsecrets.sh"; ASKPASS=$(mktemp); printf '#!/usr/bin/env bash\necho %q\n' "$VPS_PASSWORD" > "$ASKPASS"; chmod 700 "$ASKPASS"
 export SUDO_ASKPASS="$ASKPASS"
 
 cat > /tmp/envcheck.php <<'PHP'

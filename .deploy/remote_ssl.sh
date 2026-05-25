@@ -6,7 +6,7 @@ APP_DOMAIN='guillermoscafe.shop'
 EMAIL="${ADMIN_EMAIL:-admin@guillermoscafe.shop}"
 
 # SUDO_ASKPASS, no stdin collisions
-ASKPASS_FILE=$(mktemp); printf '#!/usr/bin/env bash\necho %q\n' "Drake24Charles" > "$ASKPASS_FILE"; chmod 700 "$ASKPASS_FILE"
+_DEPLOY_DIR=$(dirname "${BASH_SOURCE[0]:-$0}"); . "$_DEPLOY_DIR/_loadsecrets.sh"; ASKPASS_FILE=$(mktemp); printf '#!/usr/bin/env bash\necho %q\n' "$VPS_PASSWORD" > "$ASKPASS_FILE"; chmod 700 "$ASKPASS_FILE"
 export SUDO_ASKPASS="$ASKPASS_FILE"
 trap 'rm -f "$ASKPASS_FILE"' EXIT
 S() { sudo -A "$@"; }

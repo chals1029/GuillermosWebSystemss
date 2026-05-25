@@ -2,13 +2,26 @@
 # the Google OAuth client_secret JSON to the VPS.
 
 param(
-    [string]$VpsTarget = 'guillermos-vps'
+    [string]$VpsTarget = 'guillermos-vps',
+    [string]$VpsPassword
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSCommandPath -Parent | Split-Path -Parent
 $secretsPath = Join-Path $root '.deploy\SECRETS.local.json'
 $secrets = Get-Content $secretsPath -Raw | ConvertFrom-Json
+
+if (-not $VpsPassword) {
+    $envPath = Join-Path $root '.deploy\secrets.local.env'
+    if (Test-Path $envPath) {
+        foreach ($line in Get-Content $envPath) {
+            if ($line -match '^\s*VPS_PASSWORD=(.*)$') { $VpsPassword = $matches[1].Trim().Trim('"').Trim("'") }
+        }
+    }
+}
+if (-not $VpsPassword) {
+    throw "VPS_PASSWORD not found. Populate .deploy\secrets.local.env or pass -VpsPassword."
+}
 
 # 1) Build merged .env content
 $localEnv = [System.IO.File]::ReadAllText((Join-Path $root '.env'))
@@ -73,7 +86,7 @@ Remove-Item $tmpEnv -Force
 # 4) Remote: install with proper perms; keep the OAuth file private
 $remote = @"
 set -e
-ASKPASS=`$(mktemp); printf '#!/usr/bin/env bash\necho %q\n' 'Drake24Charles' > `"`$ASKPASS`"; chmod 700 `"`$ASKPASS`"
+ASKPASS=`$(mktemp); printf '#!/usr/bin/env bash\necho %q\n' "$VpsPassword" > `"`$ASKPASS`"; chmod 700 `"`$ASKPASS`"
 export SUDO_ASKPASS=`"`$ASKPASS`"
 APP_DIR=/var/www/guillermoscafe
 sudo -A install -o BeaBunda -g www-data -m 0640 /tmp/.env.new `"`$APP_DIR/.env`"

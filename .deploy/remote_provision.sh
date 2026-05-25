@@ -4,7 +4,8 @@
 
 set -euo pipefail
 
-SUDO_PASS="${SUDO_PASS:-Drake24Charles}"
+_DEPLOY_DIR=$(dirname "${BASH_SOURCE[0]:-$0}"); . "$_DEPLOY_DIR/_loadsecrets.sh"
+SUDO_PASS="$VPS_PASSWORD"
 APP_USER="BeaBunda"
 APP_DOMAIN="${APP_DOMAIN:-guillermoscafe.shop}"
 APP_DIR="${APP_DIR:-/var/www/guillermoscafe}"

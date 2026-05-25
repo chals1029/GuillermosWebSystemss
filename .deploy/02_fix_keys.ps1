@@ -1,12 +1,30 @@
-# Re-install our public key cleanly and write a proper SSH config alias.
+﻿# Re-install our public key cleanly and write a proper SSH config alias.
+# Reads VPS_PASSWORD from .deploy\secrets.local.env if -VpsPassword not supplied.
 param(
-    [string]$VpsHost = '20.189.74.35',
-    [string]$VpsUser = 'BeaBunda',
-    [string]$VpsPassword = 'Drake24Charles'
+    [string]$VpsHost,
+    [string]$VpsUser,
+    [string]$VpsPassword
 )
 
 $ErrorActionPreference = 'Stop'
 Import-Module Posh-SSH -ErrorAction Stop
+
+$secretsPath = Join-Path (Split-Path $PSCommandPath -Parent) 'secrets.local.env'
+if ((-not $VpsPassword -or -not $VpsHost -or -not $VpsUser) -and (Test-Path $secretsPath)) {
+    foreach ($line in Get-Content $secretsPath) {
+        if ($line -match '^\s*([^#=][^=]*)=(.*)$') {
+            $k = $matches[1].Trim(); $v = $matches[2].Trim().Trim('"').Trim("'")
+            switch ($k) {
+                'VPS_HOST'     { if (-not $VpsHost)     { $VpsHost     = $v } }
+                'VPS_USER'     { if (-not $VpsUser)     { $VpsUser     = $v } }
+                'VPS_PASSWORD' { if (-not $VpsPassword) { $VpsPassword = $v } }
+            }
+        }
+    }
+}
+if (-not $VpsHost -or -not $VpsUser -or -not $VpsPassword) {
+    throw "Missing VPS credentials. Populate .deploy\secrets.local.env or pass -VpsHost/-VpsUser/-VpsPassword."
+}
 
 $keyDir = Join-Path $env:USERPROFILE '.ssh'
 $keyPath = Join-Path $keyDir 'guillermos_vps'
@@ -69,3 +87,4 @@ Write-Host "`nTest 1: direct key auth..."
 
 Write-Host "`nTest 2: alias..."
 & ssh.exe -o BatchMode=yes guillermos-vps 'echo ALIAS_OK; whoami'
+

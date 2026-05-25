@@ -1,13 +1,37 @@
 # Bootstrap SSH key auth onto the VPS using Posh-SSH (one-time, password-based)
 # After this runs, plain ssh.exe + key auth works for all subsequent steps.
+#
+# Reads credentials from .deploy\secrets.local.env (gitignored). Create it from
+# secrets.local.env.example. NEVER commit a populated secrets file.
+
 param(
-    [string]$VpsHost = '20.189.74.35',
-    [string]$VpsUser = 'BeaBunda',
-    [string]$VpsPassword = 'Drake24Charles'
+    [string]$VpsHost,
+    [string]$VpsUser,
+    [string]$VpsPassword
 )
 
 $ErrorActionPreference = 'Stop'
 Import-Module Posh-SSH -ErrorAction Stop
+
+# Load defaults from .deploy\secrets.local.env if any of the params are missing.
+$secretsPath = Join-Path (Split-Path $PSCommandPath -Parent) 'secrets.local.env'
+if ((-not $VpsPassword -or -not $VpsHost -or -not $VpsUser) -and (Test-Path $secretsPath)) {
+    foreach ($line in Get-Content $secretsPath) {
+        if ($line -match '^\s*([^#=][^=]*)=(.*)$') {
+            $k = $matches[1].Trim()
+            $v = $matches[2].Trim().Trim('"').Trim("'")
+            switch ($k) {
+                'VPS_HOST'     { if (-not $VpsHost)     { $VpsHost     = $v } }
+                'VPS_USER'     { if (-not $VpsUser)     { $VpsUser     = $v } }
+                'VPS_PASSWORD' { if (-not $VpsPassword) { $VpsPassword = $v } }
+            }
+        }
+    }
+}
+
+if (-not $VpsHost -or -not $VpsUser -or -not $VpsPassword) {
+    throw "Missing VPS credentials. Populate .deploy\secrets.local.env or pass -VpsHost / -VpsUser / -VpsPassword."
+}
 
 $keyDir = Join-Path $env:USERPROFILE '.ssh'
 $keyPath = Join-Path $keyDir 'guillermos_vps'
