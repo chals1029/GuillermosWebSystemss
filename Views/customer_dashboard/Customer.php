@@ -2701,31 +2701,6 @@ function renderCart() {
     const totalCheckoutEl = $('checkout-total');
     const feeEl = $('checkout-delivery-fee');
 
-    // Step 1: clamp every cart line against current data-stock from the grid.
-    // This catches the case where the page stock changed after items were
-    // added (other shoppers' orders, ingredient adjustments, manual recompute).
-    const cappedNotices = [];
-    for (const [name, item] of Object.entries(cart)) {
-        const cardEl = document.querySelector('#product-grid .product[data-name="' + name + '"]')
-            || Array.from(document.querySelectorAll('#product-grid .product')).find(el => el.querySelector('.product-name')?.textContent?.trim() === name);
-        if (!cardEl) continue;
-        const dataStock = cardEl.getAttribute('data-stock');
-        if (dataStock === null) continue;
-        const stockForItem = Number(dataStock);
-        if (!Number.isFinite(stockForItem)) continue;
-        if (stockForItem <= 0) {
-            cappedNotices.push(name + ' (out of stock)');
-            delete cart[name];
-        } else if (item.quantity > stockForItem) {
-            cappedNotices.push(name + ' (capped to ' + stockForItem + ')');
-            cart[name].quantity = stockForItem;
-        }
-    }
-    if (cappedNotices.length > 0) {
-        // One alert is enough; the user sees the corrected quantities below.
-        try { alert('Cart adjusted to current ingredient stock:\n• ' + cappedNotices.join('\n• ')); } catch (_) {}
-    }
-
     if (Object.keys(cart).length === 0) {
         container.innerHTML = '<p style="text-align:center;color:#888;padding:60px 0;font-size:1.1rem;">Your cart is empty.<br>Start adding your favorite items!</p>';
         if (totalEl) totalEl.textContent = '₱0.00';
